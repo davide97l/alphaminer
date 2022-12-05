@@ -2,6 +2,7 @@ import gym
 import pandas as pd
 import numpy as np
 import logging
+from abc import ABC, abstractmethod
 from os import path as osp
 import os
 from typing import List, Optional, Union, Dict, Tuple, Any
@@ -31,6 +32,8 @@ class DataSource:
         self._dh = data_handler
         self._obs_data = self._load_obs_data()
         self._trading_data = self._load_trading_data()
+        self._trading_columns = self._trading_data[list(
+            self._trading_data.keys())[0]].columns
         self._benchmark_price = self._load_benchmark_price()
 
     def query_obs(self, date: Union[str, pd.Timestamp]) -> pd.DataFrame:
@@ -126,15 +129,10 @@ class DataSource:
         logging.warning(
             "Time cost: {:.4f}s | Init trading data Done".format(time() -
                                                                  start))
-        self._trading_columns = data[list(data.keys())[0]].columns
         return data
 
     def _load_benchmark_price(self) -> pd.DataFrame:
-        benchmark_map = {
-            "csi500": "SH000905",
-            "csi300": "SH000300",
-            "all": "SH000300"
-        }
+        benchmark_map = {"csi500": "SH000905"}
         benchmark = benchmark_map[self._market]
         feature_map = {"$close": "close", "Ref($close,1)": "prev_close"}
         df = D.features([benchmark],

@@ -4,7 +4,7 @@ infer_processors = [
     {"class": "Fillna", "kwargs": {}},
     {"class": "ZScoreNorm", "kwargs": {}},
 ]
-start_time = '2020-01-01'
+start_time = '2022-01-01'
 end_time = '2022-06-01'
 market = 'csi500'
 

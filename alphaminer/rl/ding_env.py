@@ -30,6 +30,7 @@ class DingTradingEnv(BaseEnv):
         end_date='2021-12-31',
         market='csi500',
         strategy=dict(buy_top_n=10, ),
+        random_sample=False,
         data_handler=dict(
             start_time="2010-01-01",
             end_time="2021-12-31",
@@ -46,6 +47,7 @@ class DingTradingEnv(BaseEnv):
         self._replay_path = None  # replay not used in this env
         self.obs_df = None  # store the current observation as Dataframe
         self.use_recorder = 'recorder' in self._cfg.keys()
+        self._random_sample = self._cfg.random_sample
         self._env = self._make_env()
         self._env.observation_space.dtype = np.float32  # To unify the format of envs in DI-engine
         self._observation_space = self._env.observation_space
@@ -62,9 +64,9 @@ class DingTradingEnv(BaseEnv):
         if hasattr(self, '_seed') and hasattr(
                 self, '_dynamic_seed') and self._dynamic_seed:
             np_seed = 100 * np.random.randint(1, 1000)
-            self._env.seed(self._seed + np_seed)
+            self.seed(self._seed + np_seed)
         elif hasattr(self, '_seed'):
-            self._env.seed(self._seed)
+            self.seed(self._seed)
         obs = self._env.reset()
         self.obs_df = obs  # this is because action needs obs.index to be initialized, so we store the obs in df format
         obs = to_ndarray(obs.values).astype('float32')
@@ -120,11 +122,18 @@ class DingTradingEnv(BaseEnv):
         if self.use_recorder:
             recorder = TradingRecorder(data_source=ds,
                                        dirname=self._cfg.recorder.path)
-        env = TradingEnv(data_source=ds,
-                         trading_policy=tp,
-                         max_episode_steps=self._cfg.max_episode_steps,
-                         cash=self._cfg.cash,
-                         recorder=recorder)
+        if not self._random_sample:
+            env = TradingEnv(data_source=ds,
+                            trading_policy=tp,
+                            max_episode_steps=self._cfg.max_episode_steps,
+                            cash=self._cfg.cash,
+                            recorder=recorder)
+        else:
+            env = RandomSampleEnv(data_source=ds,
+                                trading_policy=tp,
+                                max_episode_steps=self._cfg.max_episode_steps,
+                                cash=self._cfg.cash,
+                                recorder=recorder)
         env = FinalEvalRewardEnv(env)
         return env
 
@@ -168,9 +177,9 @@ class DingMATradingEnv(DingTradingEnv):
         if hasattr(self, '_seed') and hasattr(
                 self, '_dynamic_seed') and self._dynamic_seed:
             np_seed = 100 * np.random.randint(1, 1000)
-            self._env.seed(self._seed + np_seed)
+            self.seed(self._seed + np_seed)
         elif hasattr(self, '_seed'):
-            self._env.seed(self._seed)
+            self.seed(self._seed)
         raw_obs = self._env.reset()
         self.obs_df = raw_obs  # this is because action needs obs.index to be initialized, so we store the obs in df format
         agent_obs = to_ndarray(copy.deepcopy(raw_obs.values)).astype('float32')
@@ -196,72 +205,3 @@ class DingMATradingEnv(DingTradingEnv):
         }
         rew = to_ndarray([rew]).astype(np.float32)
         return BaseEnvTimestep(obs, rew, done, info)
-
-
-@ENV_REGISTRY.register('trading_ma_sample')
-class DingMASampleTradingEnv(DingTradingEnv):
-
-    def _make_env(self):
-        if 'type' in self._cfg.data_handler.keys():
-            alpha_config = copy.deepcopy(self._cfg.data_handler)
-            alpha = alpha_config.pop('type', None)
-            if alpha == 'alpha158':
-                dh = Alpha158(**alpha_config)
-            elif alpha == 'alpha360':
-                dh = Alpha360(**alpha_config)
-            else:
-                dh = AlphaMinerHandler(**alpha_config)
-        else:
-            dh = AlphaMinerHandler(**self._cfg.data_handler)
-        ds = DataSource(start_date=self._cfg.start_date,
-                        end_date=self._cfg.end_date,
-                        market=self._cfg.market,
-                        data_handler=dh)
-        tp = TradingPolicy(data_source=ds, **self._cfg.strategy)
-        if not self._cfg.max_episode_steps:
-            self._cfg.max_episode_steps = len(ds.dates) - 1
-        recorder = None
-        if self.use_recorder:
-            recorder = TradingRecorder(data_source=ds,
-                                       dirname=self._cfg.recorder.path)
-        env = RandomSampleEnv(data_source=ds,
-                         trading_policy=tp,
-                         max_episode_steps=self._cfg.max_episode_steps,
-                         cash=self._cfg.cash,
-                         recorder=recorder)
-        env = FinalEvalRewardEnv(env)
-        return env
-
-    def reset(self) -> np.ndarray:
-        if hasattr(self, '_seed') and hasattr(
-                self, '_dynamic_seed') and self._dynamic_seed:
-            np_seed = 100 * np.random.randint(1, 1000)
-            self._env.seed(self._seed + np_seed)
-        elif hasattr(self, '_seed'):
-            self._env.seed(self._seed)
-        raw_obs = self._env.reset()
-        self.obs_df = raw_obs  # this is because action needs obs.index to be initialized, so we store the obs in df format
-        agent_obs = to_ndarray(copy.deepcopy(raw_obs.values)).astype('float32')
-        action_mask = np.ones((500, 1))
-        obs = {
-            'global_state': agent_obs.flatten(),
-            'agent_state': agent_obs,
-            'action_mask': action_mask,
-        }
-        return obs
-    
-    def step(self, action: Union[np.ndarray, list]) -> BaseEnvTimestep:
-        action = to_ndarray(action).astype(np.float32)
-        action = self.action_to_series(action)
-        raw_obs, rew, done, info = self._env.step(action)
-        self.obs_df = raw_obs  # keep a copy of the original df obs
-        agent_obs = to_ndarray(copy.deepcopy(raw_obs.values)).astype('float32')
-        action_mask = np.ones((500, 1))
-        obs = {
-            'global_state': agent_obs.flatten(),
-            'agent_state': agent_obs,
-            'action_mask': action_mask,
-        }
-        rew = to_ndarray([rew]).astype(np.float32)
-        return BaseEnvTimestep(obs, rew, done, info)
-
