@@ -1,4 +1,4 @@
-from alphaminer.rl.env import DataSource, TradingEnv, TradingPolicy, Portfolio, TradingRecorder, RandomSampleEnv
+from alphaminer.rl.env import DataSource, TradingEnv, TradingPolicy, Portfolio, TradingRecorder, RandomSampleEnv, TopkOptimizer
 from os import path as osp
 from qlib.data.dataset import DataHandler
 from qlib.data import D
@@ -246,3 +246,15 @@ def test_random_sample_env():
         assert obs.shape[0] == 1
         assert obs.index[0] == code
     assert done
+
+
+def test_portfolio_optimizer():
+    action = pd.Series(np.random.rand(50))
+
+    topk = TopkOptimizer(10, equal_weight=True)
+    weight = topk.get_weight(action=action)
+    assert all(weight == 0.1)
+
+    topk = TopkOptimizer(10, equal_weight=False)
+    weight = topk.get_weight(action=action)
+    assert weight.sum() == 1

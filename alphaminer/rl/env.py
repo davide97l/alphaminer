@@ -9,6 +9,7 @@ from qlib.data import D
 from qlib.data.dataset import DataHandler
 from time import time
 from datetime import datetime
+from abc import ABC, abstractmethod
 
 
 class DataSource:
@@ -233,6 +234,38 @@ class Portfolio:
                                                     self.positions.to_dict())
 
 
+class PortfolioOptimizer(ABC):
+    """
+    Portfolio optimizer
+    """
+    @abstractmethod
+    def get_weight(self, action: pd.Series) -> pd.Series:
+        """
+        Get weighted buy stocks from action list.
+        """
+        raise NotImplementedError
+
+
+class TopkOptimizer(PortfolioOptimizer):
+    def __init__(self, topk: int, equal_weight: bool = True) -> None:
+        super().__init__()
+        self._topk = topk
+        self._equal_weight = equal_weight
+
+    def get_weight(self, action: pd.Series) -> pd.Series:
+        action = action[action > 0].sort_values(ascending=False)
+        action = action[:self._topk]
+        if self._equal_weight:
+            action = pd.Series(1 / action.shape[0], index=action.index)
+            return action
+        else:
+            action = action / action.sum()
+            return action
+
+
+PORTFOLIO_OPTIMISERS = {"Topk": TopkOptimizer}
+
+
 class TradingPolicy:
     """
     A super naive policy which will buy the top 10 stocks
@@ -242,16 +275,22 @@ class TradingPolicy:
     - The stop limit of buy and sell.
     - Round the number of shares to the board lot size.
     """
-    def __init__(self,
-                 data_source: DataSource,
-                 buy_top_n: int = 50,
-                 use_benchmark: bool = True) -> None:
+    def __init__(
+            self,
+            data_source: DataSource,
+            buy_top_n: int = 50,
+            use_benchmark: bool = True,
+            portfolio_optimizer: Optional[PortfolioOptimizer] = None) -> None:
         self._ds = data_source
         self._buy_top_n = buy_top_n
         self._stamp_duty = 0.001  # Charged only when sold.
         self._commission = 0.0003  # Charged at both side.
         self._slippage = 0.00246
         self._use_benchmark = use_benchmark  # Use excess income to calculate reward.
+        if portfolio_optimizer is None:
+            portfolio_optimizer = TopkOptimizer(self._buy_top_n,
+                                                equal_weight=True)
+        self._portfolio_optimizer = portfolio_optimizer
 
     def take_step(self, date: Union[str, pd.Timestamp], action: pd.Series,
                   portfolio: Portfolio) -> Tuple[Portfolio, float]:
@@ -267,8 +306,10 @@ class TradingPolicy:
         Returns:
             - portfolio, log_change: the newest portfolio and returns.
         """
-        buy_stocks = action[action > 0].sort_values(
-            ascending=False).index[:self._buy_top_n].tolist()
+        # buy_stocks = action[action > 0].sort_values(
+        #     ascending=False).index[:self._buy_top_n].tolist()
+        buy_stocks_weight = self._portfolio_optimizer.get_weight(action)
+        buy_stocks = buy_stocks_weight.index.tolist()
         prev_date = self._ds.prev_date(date)
         prev_price = self._ds.query_trading_data(
             prev_date, portfolio.positions.index.tolist())["close"]
@@ -285,9 +326,9 @@ class TradingPolicy:
             open_price = self._ds.query_trading_data(
                 date, portfolio.positions.index.tolist())["open"]
             current_nav = portfolio.nav(open_price)
-            buy_value = current_nav / len(buy_stocks)
-            for code in buy_stocks:
-                self.order_target_value(date, code, buy_value,
+            buy_value = buy_stocks_weight * current_nav
+            for code, value in buy_value.iteritems():
+                self.order_target_value(date, code, value,
                                         portfolio)  # type: ignore
 
         # Calculate reward
@@ -427,9 +468,11 @@ class TradingPolicy:
 class TradingRecorder:
     def __init__(self,
                  data_source: DataSource,
-                 dirname: str = "./records") -> None:
+                 dirname: str = "./records",
+                 filename: str = None) -> None:
         self._dirname = dirname
         self._ds = data_source
+        self.filename = filename
         self.reset()
 
     def record(self, date: pd.Timestamp, action: pd.Series,
@@ -442,14 +485,12 @@ class TradingRecorder:
             date, portfolio.positions.index.tolist())["close"]
         self._records["nav"].append(portfolio.nav(price))
 
-    def dump(self, file_name: Optional[str] = None) -> None:
+    def dump(self) -> None:
         """
         Overview:
             Dump the reconstructed data into csv or pickle object.
             In some case, Using pickle will be unavailable due to software version issues.
             By default the data will be saved as csv.
-        Arguments:
-            - file_name: file name.
         """
         if not osp.exists(self._dirname):
             os.makedirs(self._dirname)
@@ -457,10 +498,11 @@ class TradingRecorder:
         data = self.get_df()
         if data is None:
             return
-        if file_name is None:
-            file_name = "trading_record_{}.csv".format(
+        if self.filename is None:
+            print('nome del cazzo')
+            self.filename = "trading_record_{}.csv".format(
                 datetime.now().strftime("%y%m%d_%H%M%S"))
-        file_path = osp.join(self._dirname, file_name)
+        file_path = osp.join(self._dirname, self.filename)
         data.to_csv(file_path)
         logging.info('Record dumped at {}'.format(file_path))
 

@@ -21,6 +21,7 @@ config_test = dict(
     start_date='2011-11-01',
     end_date='2011-11-08',
     market='csi500',
+    random_sample=False,
     strategy=dict(
         buy_top_n=1,
     ),

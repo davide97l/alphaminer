@@ -9,7 +9,7 @@ from ding.envs import BaseEnv, BaseEnvTimestep, FinalEvalRewardEnv
 from ding.torch_utils import to_ndarray
 from ding.utils import ENV_REGISTRY
 
-from alphaminer.rl.env import TradingEnv, TradingPolicy, DataSource, TradingRecorder, RandomSampleEnv
+from alphaminer.rl.env import TradingEnv, TradingPolicy, DataSource, TradingRecorder, RandomSampleEnv, PORTFOLIO_OPTIMISERS
 from alphaminer.data.handler import AlphaMinerHandler
 from qlib.contrib.data.handler import Alpha158, Alpha360
 from alphaminer.rl.gtja_env import GTJADataSource
@@ -30,7 +30,12 @@ class DingTradingEnv(BaseEnv):
         start_date='2010-01-01',
         end_date='2021-12-31',
         market='csi500',
+        exp_name=None,
         strategy=dict(buy_top_n=10, ),
+        portfolio_optimizer=("Topk", {
+            "topk": 10,
+            "equal_weight": True
+        }),
         random_sample=False,
         data_handler=dict(
             start_time="2010-01-01",
@@ -124,13 +129,26 @@ class DingTradingEnv(BaseEnv):
                             end_date=self._cfg.end_date,
                             market=self._cfg.market,
                             data_handler=dh)
-        tp = TradingPolicy(data_source=ds, **self._cfg.strategy)
+        po = self._cfg.get("portfolio_optimizer")
+        if po is not None:
+            po_type, po_kwargs = po
+            assert po_type in PORTFOLIO_OPTIMISERS, "Portfolio optimizer {} do not exist!".format(
+                po_type)
+            if po_type == "Topk" and self._cfg.strategy.get(
+                    "buy_top_n"):  # For compatibility with old parameters
+                po_kwargs["topk"] = int(self._cfg.strategy.get("buy_top_n"))
+            po = PORTFOLIO_OPTIMISERS[po_type](**po_kwargs)
+        tp = TradingPolicy(data_source=ds,
+                           **self._cfg.strategy,
+                           portfolio_optimizer=po)
+
         if not self._cfg.max_episode_steps:
             self._cfg.max_episode_steps = len(ds.dates) - 1
         recorder = None
         if self.use_recorder:
             recorder = TradingRecorder(data_source=ds,
-                                       dirname=self._cfg.recorder.path)
+                                       dirname=self._cfg.recorder.path,
+                                       filename=self._cfg.recorder.get("exp_name"))
         if not self._random_sample:
             env = TradingEnv(data_source=ds,
                              trading_policy=tp,
@@ -182,7 +200,6 @@ class DingTradingEnv(BaseEnv):
 
 @ENV_REGISTRY.register('trading_ma')
 class DingMATradingEnv(DingTradingEnv):
-
     def reset(self) -> np.ndarray:
         if hasattr(self, '_seed') and hasattr(
                 self, '_dynamic_seed') and self._dynamic_seed:
@@ -200,7 +217,7 @@ class DingMATradingEnv(DingTradingEnv):
             'action_mask': action_mask,
         }
         return obs
-    
+
     def step(self, action: Union[np.ndarray, list]) -> BaseEnvTimestep:
         action = to_ndarray(action).astype(np.float32)
         action = self.action_to_series(action)

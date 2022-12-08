@@ -31,6 +31,7 @@ main_config = dict(
         ),
         recorder=dict(
             path="./records",
+            exp_name=None,
         ),
     )
 )
@@ -50,6 +51,7 @@ def main(cfg, args):
     eval_env_cfg = get_env_config(args, market, args.start_time, args.end_time, env_cls=env_class)
     eval_env_cfg.recorder = dict(
         path="./records",
+        exp_name=args.exp_name,
     )
     cfg.env.manager = deep_merge_dicts(SyncSubprocessEnvManager.default_config(), cfg.env.manager)
 

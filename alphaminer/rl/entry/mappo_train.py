@@ -44,7 +44,8 @@ def get_env_config(args, market, start_time, end_time, env_cls=DingTradingEnv):
         start_date= start_time,
         end_date=end_time,
         random_sample=(args.env_type == 'sample'),
-        data_path='../../../data/guotai_factors/',
+        # only used by env that don't use Qlib data
+        data_path=args.data_path,  # guotai: '../../../data/guotai_factors/'
         strategy=dict(
             buy_top_n=args.top_n,
         ),
@@ -197,5 +198,6 @@ if __name__ == '__main__':
     parser.add_argument('--eval-start-time', type=str, default='2017-01-01')
     parser.add_argument('--eval-end-time', type=str, default='2017-12-31')
     parser.add_argument('--exp-name', type=str, default=None)
+    parser.add_argument('--data-path', type=str, default=None)
     args = parser.parse_args()
     main(main_config, args)
