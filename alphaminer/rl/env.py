@@ -253,7 +253,7 @@ class TopkOptimizer(PortfolioOptimizer):
         self._equal_weight = equal_weight
 
     def get_weight(self, action: pd.Series) -> pd.Series:
-        action = action[action > 0].sort_values(ascending=False)
+        action = action.sort_values(ascending=False)
         action = action[:self._topk]
         if self._equal_weight:
             action = pd.Series(1 / action.shape[0], index=action.index)
@@ -306,8 +306,6 @@ class TradingPolicy:
         Returns:
             - portfolio, log_change: the newest portfolio and returns.
         """
-        # buy_stocks = action[action > 0].sort_values(
-        #     ascending=False).index[:self._buy_top_n].tolist()
         buy_stocks_weight = self._portfolio_optimizer.get_weight(action)
         buy_stocks = buy_stocks_weight.index.tolist()
         prev_date = self._ds.prev_date(date)
