@@ -12,6 +12,7 @@ from ding.utils import ENV_REGISTRY
 from alphaminer.rl.env import TradingEnv, TradingPolicy, DataSource, TradingRecorder, RandomSampleEnv
 from alphaminer.data.handler import AlphaMinerHandler
 from qlib.contrib.data.handler import Alpha158, Alpha360
+from alphaminer.rl.gtja_env import GTJADataSource
 
 
 @ENV_REGISTRY.register('trading')
@@ -40,6 +41,7 @@ class DingTradingEnv(BaseEnv):
             learn_processors=[],
         ),
         action_softmax=False,  # apply softmax to actions array
+        data_path=None,
     )
 
     def __init__(self, cfg: dict) -> None:
@@ -100,21 +102,28 @@ class DingTradingEnv(BaseEnv):
                          )  # need the original df obs to perform action
 
     def _make_env(self):
+        ds = None
         if 'type' in self._cfg.data_handler.keys():
-            alpha_config = copy.deepcopy(self._cfg.data_handler)
-            alpha = alpha_config.pop('type', None)
-            if alpha == 'alpha158':
-                dh = Alpha158(**alpha_config)
-            elif alpha == 'alpha360':
-                dh = Alpha360(**alpha_config)
+            dh_config = copy.deepcopy(self._cfg.data_handler)
+            dh_type = dh_config.pop('type', None)
+            if dh_type == 'alpha158':
+                dh = Alpha158(**dh_config)
+            elif dh_type == 'alpha360':
+                dh = Alpha360(**dh_config)
+            elif dh_type == 'guotai':
+                assert self._random_sample is not None
+                ds = GTJADataSource(start_date=self._cfg.start_date,
+                                    end_date=self._cfg.end_date,
+                                    data_dir=self._cfg.data_path)
             else:
-                dh = AlphaMinerHandler(**alpha_config)
+                dh = AlphaMinerHandler(**dh_config)
         else:
             dh = AlphaMinerHandler(**self._cfg.data_handler)
-        ds = DataSource(start_date=self._cfg.start_date,
-                        end_date=self._cfg.end_date,
-                        market=self._cfg.market,
-                        data_handler=dh)
+        if not ds:
+            ds = DataSource(start_date=self._cfg.start_date,
+                            end_date=self._cfg.end_date,
+                            market=self._cfg.market,
+                            data_handler=dh)
         tp = TradingPolicy(data_source=ds, **self._cfg.strategy)
         if not self._cfg.max_episode_steps:
             self._cfg.max_episode_steps = len(ds.dates) - 1
@@ -124,16 +133,17 @@ class DingTradingEnv(BaseEnv):
                                        dirname=self._cfg.recorder.path)
         if not self._random_sample:
             env = TradingEnv(data_source=ds,
-                            trading_policy=tp,
-                            max_episode_steps=self._cfg.max_episode_steps,
-                            cash=self._cfg.cash,
-                            recorder=recorder)
+                             trading_policy=tp,
+                             max_episode_steps=self._cfg.max_episode_steps,
+                             cash=self._cfg.cash,
+                             recorder=recorder)
         else:
             env = RandomSampleEnv(data_source=ds,
-                                trading_policy=tp,
-                                max_episode_steps=self._cfg.max_episode_steps,
-                                cash=self._cfg.cash,
-                                recorder=recorder)
+                                  trading_policy=tp,
+                                  n_sample=50,
+                                  max_episode_steps=self._cfg.max_episode_steps,
+                                  cash=self._cfg.cash,
+                                  recorder=recorder)
         env = FinalEvalRewardEnv(env)
         return env
 

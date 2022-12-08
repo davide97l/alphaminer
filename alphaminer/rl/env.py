@@ -2,9 +2,8 @@ import gym
 import pandas as pd
 import numpy as np
 import logging
-from abc import ABC, abstractmethod
-from os import path as osp
 import os
+from os import path as osp
 from typing import List, Optional, Union, Dict, Tuple, Any
 from qlib.data import D
 from qlib.data.dataset import DataHandler
@@ -32,8 +31,6 @@ class DataSource:
         self._dh = data_handler
         self._obs_data = self._load_obs_data()
         self._trading_data = self._load_trading_data()
-        self._trading_columns = self._trading_data[list(
-            self._trading_data.keys())[0]].columns
         self._benchmark_price = self._load_benchmark_price()
 
     def query_obs(self, date: Union[str, pd.Timestamp]) -> pd.DataFrame:
@@ -99,8 +96,11 @@ class DataSource:
                                    start_time=self._dates[0],
                                    end_time=self._dates[-1],
                                    as_list=True)
-        # Need all the data to avoid suspended code in the market during the time window
-        df = D.features(codes, list(feature_map.keys()), freq="day")
+        # Need all the prev data to avoid suspended code in the market during the time window
+        df = D.features(codes,
+                        list(feature_map.keys()),
+                        freq="day",
+                        end_time=self._dates[-1])
         df.rename(feature_map, axis=1, inplace=True)
 
         # Filter by chosen dates
@@ -129,10 +129,15 @@ class DataSource:
         logging.warning(
             "Time cost: {:.4f}s | Init trading data Done".format(time() -
                                                                  start))
+        self._trading_columns = data[list(data.keys())[0]].columns
         return data
 
     def _load_benchmark_price(self) -> pd.DataFrame:
-        benchmark_map = {"csi500": "SH000905"}
+        benchmark_map = {
+            "csi500": "SH000905",
+            "csi300": "SH000300",
+            "all": "SH000300"
+        }
         benchmark = benchmark_map[self._market]
         feature_map = {"$close": "close", "Ref($close,1)": "prev_close"}
         df = D.features([benchmark],
@@ -245,6 +250,7 @@ class TradingPolicy:
         self._buy_top_n = buy_top_n
         self._stamp_duty = 0.001  # Charged only when sold.
         self._commission = 0.0003  # Charged at both side.
+        self._slippage = 0.00246
         self._use_benchmark = use_benchmark  # Use excess income to calculate reward.
 
     def take_step(self, date: Union[str, pd.Timestamp], action: pd.Series,
@@ -269,16 +275,10 @@ class TradingPolicy:
         prev_nav = portfolio.nav(price=prev_price)  # type: ignore
 
         # Sell stocks
-        for code, volume in portfolio.positions.items():
+        for code in portfolio.positions.keys():
             if code in buy_stocks:
                 continue
-            value, hold = self.order_target_value(date, code, 0,
-                                                  volume)  # type: ignore
-            if hold == 0:
-                portfolio.positions.drop(code, inplace=True)
-            else:
-                portfolio.positions.loc[code] = hold  # type: ignore
-            portfolio.cash += value
+            self.order_target_value(date, code, 0, portfolio)  # type: ignore
 
         # Buy stocks
         if len(buy_stocks) > 0:
@@ -287,13 +287,8 @@ class TradingPolicy:
             current_nav = portfolio.nav(open_price)
             buy_value = current_nav / len(buy_stocks)
             for code in buy_stocks:
-                volume = 0
-                if code in portfolio.positions.index:
-                    volume = portfolio.positions.loc[code]
-                cash, hold = self.order_target_value(date, code, buy_value,
-                                                     volume)  # type: ignore
-                portfolio.cash += cash
-                portfolio.positions.loc[code] = hold
+                self.order_target_value(date, code, buy_value,
+                                        portfolio)  # type: ignore
 
         # Calculate reward
         future_price = self._ds.query_trading_data(
@@ -308,7 +303,7 @@ class TradingPolicy:
         return portfolio, log_change
 
     def order_target_value(self, date: Union[str, pd.Timestamp], code: str,
-                           value: float, hold: float) -> Tuple[float, float]:
+                           value: float, portfolio: Portfolio) -> Portfolio:
         """
         Overview:
             Set an order into the market, will calculate the cost of trading.
@@ -325,28 +320,46 @@ class TradingPolicy:
         open_price, factor, suspended = data.loc["open"], data.loc[
             "factor"], data.loc["suspended"]
         if suspended:
-            return 0, hold
+            return portfolio
+        hold = portfolio.positions.loc[
+            code] if code in portfolio.positions else 0
         # Trim volume by real open price, then adjust by factor
         volume = self._round_lot(code, value, open_price / factor) / factor
         # type: ignore
-        cash = 0
         if hold > volume:  # Sell
             if self._available_to_sell(date, code):
-                cash = open_price * (hold - volume) * (
-                    1 - self._stamp_duty - self._commission)  # type: ignore
-                hold = volume
+                portfolio.cash += open_price * (1 - self._slippage / 2) * (
+                    hold - volume) * (1 - self._stamp_duty - self._commission
+                                      )  # type: ignore
+                if volume == 0:
+                    if code in portfolio.positions:
+                        portfolio.positions.drop(code, inplace=True)
+                else:
+                    portfolio.positions.loc[code] = volume
             else:
                 logging.warning("Stock {} {} is not available to sell.".format(
                     code, date))
         else:  # Buy
             if self._available_to_buy(date, code):
-                cash = -open_price * (volume - hold) * (1 + self._commission
-                                                        )  # type: ignore
-                hold = volume
+                need_cash = open_price * (1 + self._slippage / 2) * (
+                    volume - hold) * (1 + self._commission)  # type: ignore
+                if need_cash > portfolio.cash:
+                    logging.warning(
+                        "Insufficient cash to buy stock {} {}, need {:.0f}, have {:.0f}"
+                        .format(code, date, need_cash, portfolio.cash))
+                    # Only buy a part of stock. In order to avoid the amount being negative, use floor to round up.
+                    part_volume = self._round_lot(code,
+                                                  portfolio.cash,
+                                                  open_price / factor,
+                                                  round_type="floor") / factor
+                    volume = hold + part_volume
+                portfolio.cash -= open_price * (1 + self._slippage / 2) * (
+                    volume - hold) * (1 + self._commission)
+                portfolio.positions.loc[code] = volume
             else:
                 logging.warning("Stock {} {} is not available to buy.".format(
                     code, date))
-        return cash, hold
+        return portfolio
 
     def _available_to_buy(self, date: Union[str, pd.Timestamp],
                           code: str) -> bool:
@@ -375,16 +388,33 @@ class TradingPolicy:
             return False
         return True
 
-    def _round_lot(self, code: str, value: float, real_price: float) -> int:
+    def _round_lot(self,
+                   code: str,
+                   value: float,
+                   real_price: float,
+                   round_type: str = "round") -> int:
         """
-        Round the volume by broad lot.
+        Overview:
+            Round the volume by broad lot.
+        Arguments:
+            - code: stock code.
+            - value: buy value.
+            - real_price: real price of stock.
+            - round_type: round or floor.
+        -
         """
         if code[2:5] == "688":
-            volume = int(value // real_price)
+            if round_type == "floor":
+                volume = int(value // real_price)
+            else:
+                volume = round(value / real_price)
             if volume < 200:
                 volume = 0
         else:
-            volume = int(value // (real_price * 100) * 100)
+            if round_type == "floor":
+                volume = int(value // (real_price * 100) * 100)
+            else:
+                volume = round(value / (real_price * 100)) * 100
         return volume
 
     def _stop_limit(self, code: str) -> float:
@@ -414,22 +444,60 @@ class TradingRecorder:
 
     def dump(self, file_name: Optional[str] = None) -> None:
         """
-        Dump the reconstructed dataframe into csv.
+        Overview:
+            Dump the reconstructed data into csv or pickle object.
+            In some case, Using pickle will be unavailable due to software version issues.
+            By default the data will be saved as csv.
+        Arguments:
+            - file_name: file name.
         """
-        df = self.dumps()
-        if df is None:
-            return
+        if not osp.exists(self._dirname):
+            os.makedirs(self._dirname)
 
+        data = self.get_df()
+        if data is None:
+            return
         if file_name is None:
             file_name = "trading_record_{}.csv".format(
                 datetime.now().strftime("%y%m%d_%H%M%S"))
-        path = osp.join(self._dirname, file_name)
-        if not osp.exists(self._dirname):
-            os.makedirs(self._dirname)
-        df.to_csv(path)
-        logging.info('Record dumped at {}'.format(path))
+        file_path = osp.join(self._dirname, file_name)
+        data.to_csv(file_path)
+        logging.info('Record dumped at {}'.format(file_path))
 
-    def dumps(self) -> Optional[pd.DataFrame]:
+    @property
+    def records(self) -> Optional[Dict[str, Any]]:
+        """
+        Reconstruct records into dict.
+        """
+        if len(self._records["date"]) == 0:
+            return
+        date = self._records["date"]
+        # Action dataframe
+        action = pd.concat(self._records["action"], axis=1,
+                           keys=date).transpose()
+        # Position dataframe
+        position = pd.concat(self._records["position"], axis=1,
+                             keys=date).transpose()
+
+        # Nav dataframe
+        nav = pd.DataFrame(self._records["nav"], index=date, columns=["nav"])
+        # Cash dataframe
+        cash = pd.DataFrame(self._records["cash"],
+                            index=date,
+                            columns=["cash"])
+
+        # Join together
+        data = {
+            "date": date,
+            "action": action,
+            "position": position,
+            "nav": nav,
+            "cash": cash
+        }
+
+        return data
+
+    def get_df(self) -> Optional[pd.DataFrame]:
         """
         Reconstruct records into dataframe.
         """
@@ -478,6 +546,8 @@ class TradingEnv(gym.Env):
                  recorder: Optional[TradingRecorder] = None) -> None:
         super().__init__()
         self._ds = data_source
+        if max_episode_steps == -1:
+            max_episode_steps = len(self._ds.dates) - 1
         self.max_episode_steps = max_episode_steps
         assert len(
             self._ds.dates
@@ -558,6 +628,8 @@ class RandomSampleEnv(TradingEnv):
     def __init__(self, *args, n_sample: int = 50, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self._n_sample = n_sample
+        self.observation_space[0] = n_sample  # type: ignore
+        self.action_space = n_sample
 
     def reset(self) -> pd.DataFrame:
         """

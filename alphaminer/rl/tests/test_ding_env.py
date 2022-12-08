@@ -5,6 +5,7 @@ from os import path as osp
 
 from ding.utils import set_pkg_seed
 from alphaminer.rl.ding_env import DingTradingEnv
+from alphaminer.rl.tests.test_gtja_env import get_data_path as get_gtja_data_path
 import qlib
 
 
@@ -49,6 +50,7 @@ qlib_config = dict(
     start_date=start_time,
     end_date=end_time,
     market='csi500',
+    random_sample=False,
     strategy=dict(
         buy_top_n=10,
     ),
@@ -71,6 +73,7 @@ alpha158_config = dict(
     start_date=start_time,
     end_date=end_time,
     market='csi500',
+    random_sample=False,
     strategy=dict(
         buy_top_n=10,
     ),
@@ -81,6 +84,23 @@ alpha158_config = dict(
         end_time=end_time,
         fit_start_time=start_time,
         fit_end_time=end_time,
+    )
+)
+
+guotai_config = dict(
+    env_id='Trading-v0',
+    max_episode_steps=None,
+    cash=1000000,
+    start_date="2018-01-05",
+    end_date="2020-06-30",
+    market='csi500',
+    data_path=get_gtja_data_path(),
+    random_sample=True,
+    strategy=dict(
+        buy_top_n=10,
+    ),
+    data_handler=dict(
+        type='guotai',
     )
 )
 
@@ -155,6 +175,35 @@ def test_ding_trading_alpha158_csi500():
         action = np.random.random(size=action_dim)
         timestep = env.step(action)
         assert timestep.obs.shape[0] == 500 * 158
+        final_eval_reward += timestep.reward
+        #print("{}(dtype: {})".format(timestep.reward, timestep.reward.dtype))
+        if timestep.done:
+            print(
+                "{}({}), {}({})".format(
+                    timestep.info['final_eval_reward'], type(timestep.info['final_eval_reward']), final_eval_reward,
+                    type(final_eval_reward)
+                )
+            )
+            # timestep.reward and the cumulative reward in wrapper FinalEvalReward are not the same.
+            assert abs(timestep.info['final_eval_reward'].item() - final_eval_reward.item()) / \
+                   abs(timestep.info['final_eval_reward'].item()) < 1e-5
+            break
+
+
+def test_ding_trading_guotai():  # todo
+    qlib.init()
+    set_pkg_seed(1234, use_cuda=False)
+    env = DingTradingEnv(EasyDict(guotai_config))
+    env.seed(1234)
+    obs = env.reset()
+    print(obs.shape)
+    action_dim = env.action_space.shape
+    final_eval_reward = np.array([0.], dtype=np.float32)
+
+    while True:
+        action = np.random.random(size=action_dim)
+        timestep = env.step(action)
+        assert timestep.obs.shape[0] == 50 * 10
         final_eval_reward += timestep.reward
         #print("{}(dtype: {})".format(timestep.reward, timestep.reward.dtype))
         if timestep.done:

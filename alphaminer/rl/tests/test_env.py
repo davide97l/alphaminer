@@ -1,6 +1,5 @@
 from alphaminer.rl.env import DataSource, TradingEnv, TradingPolicy, Portfolio, TradingRecorder, RandomSampleEnv
 from os import path as osp
-from typing import Tuple, List
 from qlib.data.dataset import DataHandler
 from qlib.data import D
 import os
@@ -41,7 +40,7 @@ class SimpleDataHandler(DataHandler):
         super().__init__(instruments, start_time, end_time, data_loader,
                          init_data, fetch_orig)
 
-    def _get_feature_config(self) -> Tuple[List[str], List[str]]:
+    def _get_feature_config(self):
         fields = ["$close", "$open", "$factor"]
         names = ["CLOSE", "OPEN", "FACTOR"]
         return fields, names

@@ -41,9 +41,10 @@ def get_env_config(args, market, start_time, end_time, env_cls=DingTradingEnv):
         max_episode_steps=args.max_episode_steps,
         cash=cash,
         market=market,
-        start_date=start_time,
+        start_date= start_time,
         end_date=end_time,
         random_sample=(args.env_type == 'sample'),
+        data_path='../../../data/guotai_factors/',
         strategy=dict(
             buy_top_n=args.top_n,
         ),
@@ -59,7 +60,11 @@ def get_env_config(args, market, start_time, end_time, env_cls=DingTradingEnv):
         'basic': None,
         '158': 'alpha158',
         'sample': 'alpha158',
+        'guotai': 'guotai',
     }[args.env_type]
+
+    if args.env_type == 'guotai':
+        env_config.random_sample = True
 
     env_config = deep_merge_dicts(env_cls.default_config(), env_config)
     return env_config
@@ -94,17 +99,20 @@ def get_policy_config(args, policy_cls, collector_cls, evaluator_cls, learner_cl
                 'basic': 6,
                 '158': 158,
                 'sample': 158,
+                'guotai': 10,
             }[args.env_type],
             global_obs_shape={
                 'basic': 500*6,
                 '158': 500*158,
                 'sample': 50*158,
+                'guotai': 50*10,
             }[args.env_type],
             action_shape=1,
             agent_num={
                 'basic': 500,
                 '158': 500,
                 'sample': 50,
+                'guotai': 50,
             }[args.env_type],
         )
     )
@@ -125,8 +133,8 @@ def main(cfg, args):
     qlib.init(provider_uri='~/.qlib/qlib_data/cn_data', region="cn")
     set_pkg_seed(args.seed)
 
-    collect_env_cfg = get_env_config(args, market, train_start_time, train_end_time, env_cls=DingMATradingEnv)
-    eval_env_cfg = get_env_config(args, market, eval_start_time, eval_end_time, env_cls=DingMATradingEnv)
+    collect_env_cfg = get_env_config(args, market, args.train_start_time, args.train_end_time, env_cls=DingMATradingEnv)
+    eval_env_cfg = get_env_config(args, market, args.eval_start_time, args.eval_end_time, env_cls=DingMATradingEnv)
     cfg.env.manager = deep_merge_dicts(SyncSubprocessEnvManager.default_config(), cfg.env.manager)
 
     policy_cfg = get_policy_config(args, PPOPolicy, EpisodeSerialCollector, InteractionSerialEvaluator, BaseLearner)
@@ -176,7 +184,7 @@ def main(cfg, args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='trading rl train')
-    parser.add_argument('-e', '--env-type', choices=['basic', '158', 'sample'], default='basic')
+    parser.add_argument('-e', '--env-type', choices=['basic', '158', 'sample', 'guotai'], default='basic')
     parser.add_argument('-t', '--top-n', type=int, default=20,)
     parser.add_argument('-ms', '--max-episode-steps', type=int, default=40)
     parser.add_argument('-cn', '--collect-env-num', type=int, default=1)
@@ -184,6 +192,10 @@ if __name__ == '__main__':
     parser.add_argument('-s', '--seed', type=int, default=0)
     parser.add_argument('-bs', '--batch-size', type=int, default=64)
     parser.add_argument('-lr', '--learning-rate', type=float, default=3e-4)
+    parser.add_argument('--train-start-time', type=str, default='2010-01-01')
+    parser.add_argument('--train-end-time', type=str, default='2016-12-31')
+    parser.add_argument('--eval-start-time', type=str, default='2017-01-01')
+    parser.add_argument('--eval-end-time', type=str, default='2017-12-31')
     parser.add_argument('--exp-name', type=str, default=None)
     args = parser.parse_args()
     main(main_config, args)
