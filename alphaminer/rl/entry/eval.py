@@ -16,7 +16,7 @@ from ding.worker import InteractionSerialEvaluator, BaseLearner, EpisodeSerialCo
 
 
 market = 'csi500'
-eval_start_time = '2019-07-01'
+eval_start_time = '2019-01-01'
 eval_end_time = '2022-06-30'
 stop_value = 1000
 
@@ -42,6 +42,7 @@ def main(cfg, args):
     qlib.init(provider_uri='~/.qlib/qlib_data/cn_data', region="cn")
     args.batch_size = 1  # for compatibility with config
     args.learning_rate = 0.  # for compatibility  with config
+    args.collect_env_num = 1  # for compatibility  with config
     set_pkg_seed(args.seed)
     env_class = {
         'single': DingTradingEnv,
@@ -51,7 +52,7 @@ def main(cfg, args):
     eval_env_cfg = get_env_config(args, market, args.start_time, args.end_time, env_cls=env_class)
     eval_env_cfg.recorder = dict(
         path="./records",
-        exp_name=args.exp_name,
+        exp_name=args.exp_name + '.csv',
     )
     cfg.env.manager = deep_merge_dicts(SyncSubprocessEnvManager.default_config(), cfg.env.manager)
 
@@ -66,6 +67,8 @@ def main(cfg, args):
     policy_cfg.eval.evaluator.n_episode = cfg.env.n_evaluator_episode
     policy_cfg.eval.evaluator.stop_value = cfg.env.stop_value
     policy_cfg.load_path = args.load_path
+    if args.critic_size:
+        policy_cfg.model.critic_input_size = args.critic_size
     if model_class is not None:
         model = model_class(**policy_cfg.model)
     else:
@@ -98,13 +101,13 @@ if __name__ == '__main__':
     parser.add_argument('-e', '--env-type', choices=['basic', '158', 'sample'], default='158')
     parser.add_argument('-a', '--action-type', choices=['single', 'multi'], default='multi')
     parser.add_argument('-t', '--top-n', type=int, default=20,)  # remember to change this according to the loaded policy
-    parser.add_argument('-cn', '--collect-env-num', type=int, default=1)
     parser.add_argument('-en', '--evaluate-env-num', type=int, default=1)
     parser.add_argument('-s', '--seed', type=int, default=0)
-    parser.add_argument('--start-time', type=str, default='2019-07-01')
+    parser.add_argument('--start-time', type=str, default='2019-01-01')
     parser.add_argument('--end-time', type=str, default='2022-06-30')
     parser.add_argument('--exp-name', type=str, default='eval')
     parser.add_argument('--load-path', type=str, default=None)
+    parser.add_argument('-cs', '--critic-size', type=int, default=None)
 
     args = parser.parse_args()
     args.max_episode_steps = 0

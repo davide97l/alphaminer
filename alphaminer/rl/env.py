@@ -668,8 +668,6 @@ class RandomSampleEnv(TradingEnv):
     def __init__(self, *args, n_sample: int = 50, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self._n_sample = n_sample
-        self.observation_space[0] = n_sample  # type: ignore
-        self.action_space = n_sample
 
     def reset(self) -> pd.DataFrame:
         """

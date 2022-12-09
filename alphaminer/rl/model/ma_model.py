@@ -64,11 +64,11 @@ class MAVACv1(nn.Module):
         self.critic = [self.critic_encoder, self.critic_head]
         self.actor = nn.ModuleList(self.actor)
         self.critic = nn.ModuleList(self.critic)
-    
+
     def forward(self, inputs: Union[torch.Tensor, Dict], mode: str) -> Dict:
         assert mode in self.mode, "not support forward mode: {}/{}".format(mode, self.mode)
         return getattr(self, mode)(inputs)
-    
+
     def compute_actor(self, x: torch.Tensor) -> Dict:
         x = x['agent_state']
         x = self.actor_encoder(x)
@@ -76,7 +76,7 @@ class MAVACv1(nn.Module):
         for k in x.keys():
             x[k] = x[k].squeeze(-1)
         return {'logit': x}
-    
+
     def compute_critic(self, x: Dict) -> Dict:
         x = self.critic_encoder(x['global_state'])
         x = self.critic_head(x)
@@ -107,6 +107,7 @@ class MAVACv2(nn.Module):
             norm_type: Optional[str] = None,
             sigma_type: Optional[str] = 'independent',
             bound_type: Optional[str] = None,
+            critic_input_size: Optional[int] = None,
     ) -> None:
         super().__init__()
         agent_obs_shape: int = squeeze(agent_obs_shape)
@@ -122,7 +123,8 @@ class MAVACv2(nn.Module):
         )
 
         self.critic_head = ReducedRegressionHead(
-            encoder_hidden_size_list[-1] * agent_num, critic_head_hidden_size, 1, critic_head_layer_num, activation=activation, norm_type=norm_type
+            encoder_hidden_size_list[-1] * agent_num if critic_input_size is None else critic_input_size,
+            critic_head_hidden_size, 1, critic_head_layer_num, activation=activation, norm_type=norm_type
         )
 
         self.actor_head = ReparameterizationHead(
@@ -138,11 +140,11 @@ class MAVACv2(nn.Module):
         self.critic = [self.encoder, self.critic_head]
         self.actor = nn.ModuleList(self.actor)
         self.critic = nn.ModuleList(self.critic)
-    
+
     def forward(self, inputs: Union[torch.Tensor, Dict], mode: str) -> Dict:
         assert mode in self.mode, "not support forward mode: {}/{}".format(mode, self.mode)
         return getattr(self, mode)(inputs)
-    
+
     def compute_actor(self, x: torch.Tensor) -> Dict:
         x = x['agent_state']
         x = self.encoder(x)
@@ -150,7 +152,7 @@ class MAVACv2(nn.Module):
         for k in x.keys():
             x[k] = x[k].squeeze(-1)
         return {'logit': x}
-    
+
     def compute_critic(self, x: Dict) -> Dict:
         x = x['agent_state']
         x = self.encoder(x)
@@ -195,7 +197,7 @@ class ReducedRegressionHead(nn.Module):
         self.final_tanh = final_tanh
         if self.final_tanh:
             self.tanh = nn.Tanh()
-    
+
     def forward(self, x: torch.Tensor) -> Dict:
         x = self.main(x)
         x = self.last(x)
