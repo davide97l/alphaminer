@@ -9,7 +9,7 @@ from ding.envs import SyncSubprocessEnvManager, BaseEnvManager
 from ding.policy import PPOPolicy, DDPGPolicy
 from ding.utils import deep_merge_dicts, set_pkg_seed
 from alphaminer.rl.ding_env import DingTradingEnv, DingMATradingEnv
-from alphaminer.rl.model.ma_model import MAVACv1, MAVACv2
+from alphaminer.rl.model.mappo import MAVACv1, MAVACv2
 from alphaminer.rl.entry.mappo_train import get_env_config, get_policy_config
 import torch
 from ding.worker import InteractionSerialEvaluator, BaseLearner, EpisodeSerialCollector, SampleSerialCollector, NaiveReplayBuffer
@@ -98,7 +98,7 @@ def main(cfg, args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='trading rl train')
     parser.add_argument('-p', '--policy', choices=['ppo', 'ddpg'], default='ppo')
-    parser.add_argument('-e', '--env-type', choices=['basic', '158', 'sample'], default='158')
+    parser.add_argument('-e', '--env-type', choices=['basic', '158', 'guotai'], default='158')
     parser.add_argument('-a', '--action-type', choices=['single', 'multi'], default='multi')
     parser.add_argument('-t', '--top-n', type=int, default=20,)  # remember to change this according to the loaded policy
     parser.add_argument('-en', '--evaluate-env-num', type=int, default=1)
@@ -108,7 +108,10 @@ if __name__ == '__main__':
     parser.add_argument('--exp-name', type=str, default='eval')
     parser.add_argument('--load-path', type=str, default=None)
     parser.add_argument('-cs', '--critic-size', type=int, default=None)
-
+    parser.add_argument('-ss', '--sample-size', type=int, default=None)
+    parser.add_argument('-sl', '--slippage', type=float, default=0.00246)
+    parser.add_argument('--data-path', type=str, default=None)
+    parser.add_argument('-sm', '--softmax', action='store_true')
     args = parser.parse_args()
     args.max_episode_steps = 0
     main(main_config, args)

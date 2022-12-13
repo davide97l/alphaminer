@@ -280,12 +280,15 @@ class TradingPolicy:
             data_source: DataSource,
             buy_top_n: int = 50,
             use_benchmark: bool = True,
-            portfolio_optimizer: Optional[PortfolioOptimizer] = None) -> None:
+            portfolio_optimizer: Optional[PortfolioOptimizer] = None,
+            slippage: Optional[int] = 0.00246,
+            commission: Optional[int] = 0.0003,
+            stamp_duty: Optional[int] = 0.001) -> None:
         self._ds = data_source
         self._buy_top_n = buy_top_n
-        self._stamp_duty = 0.001  # Charged only when sold.
-        self._commission = 0.0003  # Charged at both side.
-        self._slippage = 0.00246
+        self._stamp_duty = stamp_duty  # Charged only when sold.
+        self._commission = commission  # Charged at both side.
+        self._slippage = slippage
         self._use_benchmark = use_benchmark  # Use excess income to calculate reward.
         if portfolio_optimizer is None:
             portfolio_optimizer = TopkOptimizer(self._buy_top_n,
@@ -497,7 +500,6 @@ class TradingRecorder:
         if data is None:
             return
         if self.filename is None:
-            print('nome del cazzo')
             self.filename = "trading_record_{}.csv".format(
                 datetime.now().strftime("%y%m%d_%H%M%S"))
         file_path = osp.join(self._dirname, self.filename)
@@ -668,6 +670,8 @@ class RandomSampleEnv(TradingEnv):
     def __init__(self, *args, n_sample: int = 50, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self._n_sample = n_sample
+        self.observation_space[0] = n_sample  # type: ignore
+        self.action_space = n_sample
 
     def reset(self) -> pd.DataFrame:
         """

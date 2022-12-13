@@ -7,18 +7,17 @@ from easydict import EasyDict
 
 from ding.envs import SyncSubprocessEnvManager, BaseEnvManager
 from ding.policy import PPOPolicy
-from ding.utils import deep_merge_dicts, set_pkg_seed
+from ding.utils import deep_merge_dicts, set_pkg_seed, DistContext
 from alphaminer.rl.ding_env import DingTradingEnv, DingMATradingEnv
-from alphaminer.rl.ding_reduced_features_env import DingMAReducedFeaturesTradingEnv
-from alphaminer.rl.model.ma_model import MAVACv1, MAVACv2
+from alphaminer.rl.model.mappo import MAVACv1, MAVACv2
 from ding.worker import InteractionSerialEvaluator, BaseLearner, EpisodeSerialCollector, SampleSerialCollector, NaiveReplayBuffer
 
 
 market = 'csi500'
 train_start_time = '2010-01-01'
 train_end_time = '2016-12-31'
-eval_start_time = '2017-01-01'
-eval_end_time = '2017-12-31'
+eval_start_time = '2017-07-01'
+eval_end_time = '2018-12-31'
 
 cash = 1000000
 stop_value = 1
@@ -27,8 +26,8 @@ stop_value = 1
 main_config = dict(
     policy=dict(),
     env=dict(
-        n_evaluator_episode=8,
-        stop_value=1,
+        n_evaluator_episode=1,
+        stop_value=stop_value,
         manager=dict(
             shared_memory=False,
         )
@@ -45,23 +44,14 @@ def get_env_config(args, market, start_time, end_time, env_cls=DingTradingEnv):
         start_date=start_time,
         end_date=end_time,
         random_sample=(args.env_type == 'sample'),
-        len_index=500,
         strategy=dict(
             buy_top_n=args.top_n,
         ),
         data_handler=dict(
             type=None,
-            instruments=market,
+            market=market,
             start_time=start_time,
             end_time=end_time,
-        ),
-        model=dict(
-            encoder_sizes=[158 * 500, 5000, 5000],
-            decoder_sizes=[5000, 5000, 158 * 500],
-            type='vae',
-            flatten_encode=True,
-            load_path=args.encoder_path,
-            preprocess_obs=False,
         ),
     )
     env_config = EasyDict(env_config)
@@ -80,15 +70,18 @@ def get_policy_config(args, policy_cls, collector_cls, evaluator_cls, learner_cl
         cuda=True,
         action_space='continuous',
         learn=dict(
+            multi_gpu=True,
             learning_rate=args.learning_rate,
-            epoch_per_collect=10,
+            epoch_per_collect=1,
             batch_size=args.batch_size,
             entropy_weight=0.001,
             ignore_done=True,
-            learner=dict()
+            learner=dict(
+                save_ckpt_after_iter=100000,
+            )
         ),
         collect=dict(
-            n_episode=args.collect_env_num * 2,
+            n_episode=args.collect_env_num,
             discount_factor=0.999,
             collector=dict(
                 get_train_sample=True,
@@ -96,7 +89,7 @@ def get_policy_config(args, policy_cls, collector_cls, evaluator_cls, learner_cl
         ),
         eval=dict(
             evaluator=dict(
-                eval_freq=1000,
+                eval_freq=5000,
             )
         ),
         model=dict(
@@ -106,9 +99,9 @@ def get_policy_config(args, policy_cls, collector_cls, evaluator_cls, learner_cl
                 'sample': 158,
             }[args.env_type],
             global_obs_shape={
-                'basic': args.latent_space,
-                '158': args.latent_space,
-                'sample': args.latent_space,
+                'basic': 500*6,
+                '158': 500*158,
+                'sample': 50*158,
             }[args.env_type],
             action_shape=1,
             agent_num={
@@ -135,10 +128,8 @@ def main(cfg, args):
     qlib.init(provider_uri='~/.qlib/qlib_data/cn_data', region="cn")
     set_pkg_seed(args.seed)
 
-    collect_env_cfg = get_env_config(args, market, train_start_time, train_end_time,
-                                     env_cls=DingMAReducedFeaturesTradingEnv)
-    eval_env_cfg = get_env_config(args, market, eval_start_time, eval_end_time,
-                                  env_cls=DingMAReducedFeaturesTradingEnv)
+    args.collect_env_num = args.collect_env_num // 8
+    collect_env_cfg = get_env_config(args, market, train_start_time, train_end_time, env_cls=DingMATradingEnv)
     cfg.env.manager = deep_merge_dicts(SyncSubprocessEnvManager.default_config(), cfg.env.manager)
 
     policy_cfg = get_policy_config(args, PPOPolicy, EpisodeSerialCollector, InteractionSerialEvaluator, BaseLearner)
@@ -147,8 +138,13 @@ def main(cfg, args):
     model = MAVACv2(**policy_cfg.model)
     policy = PPOPolicy(policy_cfg, model=model)
 
-    collect_env_temp = DingMAReducedFeaturesTradingEnv(collect_env_cfg)
-    evaluate_env_temp = DingMAReducedFeaturesTradingEnv(eval_env_cfg)
+    # args.max_episode_steps = -1
+    # args.env_type = '158'
+    # args.top_n = 20
+    eval_env_cfg = get_env_config(args, market, eval_start_time, eval_end_time, env_cls=DingMATradingEnv)
+
+    collect_env_temp = DingMATradingEnv(collect_env_cfg)
+    evaluate_env_temp = DingMATradingEnv(eval_env_cfg)
     collector_env = SyncSubprocessEnvManager(
         env_fn=[lambda: collect_env_temp for _ in range(args.collect_env_num)],
         cfg=cfg.env.manager,
@@ -188,10 +184,8 @@ def main(cfg, args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='trading rl train')
-    parser.add_argument('-e', '--env-type', choices=['basic', '158', 'sample', 'vae'], default='158')
+    parser.add_argument('-e', '--env-type', choices=['basic', '158', 'sample'], default='basic')
     parser.add_argument('-t', '--top-n', type=int, default=20,)
-    parser.add_argument('-ls', '--latent-space', type=int, default=5000,)
-    parser.add_argument('-ep', '--encoder-path', type=str, default='../encoder/weights/vae_fl_ls5000_1205.pth')
     parser.add_argument('-ms', '--max-episode-steps', type=int, default=40)
     parser.add_argument('-cn', '--collect-env-num', type=int, default=1)
     parser.add_argument('-en', '--evaluate-env-num', type=int, default=1)
@@ -199,5 +193,8 @@ if __name__ == '__main__':
     parser.add_argument('-bs', '--batch-size', type=int, default=64)
     parser.add_argument('-lr', '--learning-rate', type=float, default=3e-4)
     parser.add_argument('--exp-name', type=str, default=None)
+    parser.add_argument('--local_rank', type=int, default=0)
     args = parser.parse_args()
-    main(main_config, args)
+    
+    with DistContext():
+        main(main_config, args)
