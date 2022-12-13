@@ -500,6 +500,7 @@ class TradingRecorder:
         if data is None:
             return
         if self.filename is None:
+            print('nome del cazzo')
             self.filename = "trading_record_{}.csv".format(
                 datetime.now().strftime("%y%m%d_%H%M%S"))
         file_path = osp.join(self._dirname, self.filename)

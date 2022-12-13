@@ -2,10 +2,9 @@ import pytest
 import numpy as np
 from easydict import EasyDict
 from os import path as osp
-
 from ding.utils import set_pkg_seed
 from alphaminer.rl.ding_env import DingTradingEnv
-from alphaminer.rl.tests.test_gtja_env import get_data_path as get_gtja_data_path
+from alphaminer.rl.ding_reduced_features_env import DingReducedFeaturesEnv
 import qlib
 
 
@@ -88,21 +87,63 @@ alpha158_config = dict(
     )
 )
 
-guotai_config = dict(
+
+alpha158_vae_config = dict(
     env_id='Trading-v0',
-    max_episode_steps=None,
+    max_episode_steps=100,
     cash=1000000,
-    start_date="2018-01-05",
-    end_date="2020-06-30",
+    start_date=start_time,
+    end_date=end_time,
     market='csi500',
-    data_path=get_gtja_data_path(),
-    random_sample=True,
     strategy=dict(
         buy_top_n=10,
     ),
     data_handler=dict(
-        type='guotai',
-    )
+        type='alpha158',
+        market='csi500',
+        start_time=start_time,
+        end_time=end_time,
+        fit_start_time=start_time,
+        fit_end_time=end_time,
+    ),
+    model=dict(
+        encoder_sizes=[158, 64, 15],
+        decoder_sizes=[15, 64, 158],
+        type='vae',
+        flatten_encode=False,
+        load_path=None,
+        preprocess_obs=True,
+    ),
+)
+
+
+alpha158_vae_flatten_obs_config = dict(
+    env_id='Trading-v0',
+    max_episode_steps=100,
+    cash=1000000,
+    start_date=start_time,
+    end_date=end_time,
+    market='csi500',
+    len_index=500,
+    strategy=dict(
+        buy_top_n=10,
+    ),
+    data_handler=dict(
+        type='alpha158',
+        market='csi500',
+        start_time=start_time,
+        end_time=end_time,
+        fit_start_time=start_time,
+        fit_end_time=end_time,
+    ),
+    model=dict(
+        encoder_sizes=[158 * 500, 64, 10 * 500],
+        decoder_sizes=[10 * 500, 64, 158 * 500],
+        type='vae',
+        flatten_encode=True,
+        load_path=None,
+        preprocess_obs=True,
+    ),
 )
 
 
@@ -135,6 +176,7 @@ def test_ding_trading():
             break
 
 
+@pytest.mark.envtest
 def test_ding_trading_qlib_csi500():
     qlib.init(provider_uri='~/.qlib/qlib_data/cn_data', region="cn")
     set_pkg_seed(1234, use_cuda=False)
@@ -163,6 +205,7 @@ def test_ding_trading_qlib_csi500():
             break
 
 
+@pytest.mark.envtest
 def test_ding_trading_alpha158_csi500():
     qlib.init(provider_uri='~/.qlib/qlib_data/cn_data', region="cn")
     set_pkg_seed(1234, use_cuda=False)
@@ -191,20 +234,29 @@ def test_ding_trading_alpha158_csi500():
             break
 
 
-def test_ding_trading_guotai():  # todo
-    qlib.init()
+@pytest.mark.envtest
+@pytest.mark.parametrize("flatten_obs", [True, False])
+# use 2 diff configs
+def test_ding_reduced_obs_alpha158_csi500(flatten_obs):
+    qlib.init(provider_uri='~/.qlib/qlib_data/cn_data', region="cn")
     set_pkg_seed(1234, use_cuda=False)
-    env = DingTradingEnv(EasyDict(guotai_config))
+    if not flatten_obs:
+        config = alpha158_vae_config
+    else:
+        config = alpha158_vae_flatten_obs_config
+    env = DingReducedFeaturesEnv(EasyDict(config))
     env.seed(1234)
-    obs = env.reset()
-    print(obs.shape)
+    env.reset()
     action_dim = env.action_space.shape
     final_eval_reward = np.array([0.], dtype=np.float32)
 
     while True:
         action = np.random.random(size=action_dim)
         timestep = env.step(action)
-        assert timestep.obs.shape[0] == 50 * 10
+        if not flatten_obs:
+            assert timestep.obs.shape[0] == 500 * 15
+        else:
+            assert timestep.obs.flatten().shape[0] == 500 * 10
         final_eval_reward += timestep.reward
         #print("{}(dtype: {})".format(timestep.reward, timestep.reward.dtype))
         if timestep.done:

@@ -98,7 +98,7 @@ def main(cfg, args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='trading rl train')
     parser.add_argument('-p', '--policy', choices=['ppo', 'ddpg'], default='ppo')
-    parser.add_argument('-e', '--env-type', choices=['basic', '158', 'guotai'], default='158')
+    parser.add_argument('-e', '--env-type', choices=['basic', '158', 'sample'], default='158')
     parser.add_argument('-a', '--action-type', choices=['single', 'multi'], default='multi')
     parser.add_argument('-t', '--top-n', type=int, default=20,)  # remember to change this according to the loaded policy
     parser.add_argument('-en', '--evaluate-env-num', type=int, default=1)
@@ -110,7 +110,6 @@ if __name__ == '__main__':
     parser.add_argument('-cs', '--critic-size', type=int, default=None)
     parser.add_argument('-ss', '--sample-size', type=int, default=None)
     parser.add_argument('-sl', '--slippage', type=float, default=0.00246)
-    parser.add_argument('--data-path', type=str, default=None)
     parser.add_argument('-sm', '--softmax', action='store_true')
     args = parser.parse_args()
     args.max_episode_steps = 0
