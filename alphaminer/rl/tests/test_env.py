@@ -23,12 +23,8 @@ class SimpleDataHandler(DataHandler):
     """
     Fit qlib data to RL env.
     """
-    def __init__(self,
-                 instruments,
-                 start_time,
-                 end_time,
-                 init_data=True,
-                 fetch_orig=True):
+
+    def __init__(self, instruments, start_time, end_time, init_data=True, fetch_orig=True):
         data_loader = {
             "class": "QlibDataLoader",
             "kwargs": {
@@ -37,8 +33,7 @@ class SimpleDataHandler(DataHandler):
                 }
             },
         }
-        super().__init__(instruments, start_time, end_time, data_loader,
-                         init_data, fetch_orig)
+        super().__init__(instruments, start_time, end_time, data_loader, init_data, fetch_orig)
 
     def _get_feature_config(self):
         fields = ["$close", "$open", "$factor"]
@@ -47,12 +42,12 @@ class SimpleDataHandler(DataHandler):
 
 
 def test_data_source():
-    ds = DataSource(start_date="2010-01-01",
-                    end_date="2020-01-01",
-                    market="csi500",
-                    data_handler=SimpleDataHandler(D.instruments("csi500"),
-                                                   start_time="2010-01-01",
-                                                   end_time="2020-01-01"))
+    ds = DataSource(
+        start_date="2010-01-01",
+        end_date="2020-01-01",
+        market="csi500",
+        data_handler=SimpleDataHandler(D.instruments("csi500"), start_time="2010-01-01", end_time="2020-01-01")
+    )
 
     # Check query
     data = ds.query_trading_data("2012-01-04")
@@ -63,12 +58,12 @@ def test_data_source():
 
 
 def test_portfolio():
-    ds = DataSource(start_date="2010-01-01",
-                    end_date="2020-01-01",
-                    market="csi500",
-                    data_handler=SimpleDataHandler(D.instruments("csi500"),
-                                                   start_time="2010-01-01",
-                                                   end_time="2020-01-01"))
+    ds = DataSource(
+        start_date="2010-01-01",
+        end_date="2020-01-01",
+        market="csi500",
+        data_handler=SimpleDataHandler(D.instruments("csi500"), start_time="2010-01-01", end_time="2020-01-01")
+    )
 
     cash = 0
     pf = Portfolio(cash=cash)
@@ -86,12 +81,12 @@ def test_portfolio():
     pf = Portfolio(cash=0)
     codes = ["SH600006", "SH600021"]
     pf.positions = pd.Series([1000, 1000], index=codes, dtype=np.float64)
-    price = ds.query_trading_data(date="2011-11-01",
-                                  instruments=codes)["close"]
+    price = ds.query_trading_data(date="2011-11-01", instruments=codes)["close"]
     old_nav = pf.nav(price)
     price = ds.query_trading_data(
         date="2011-11-02",  # The day with null value
-        instruments=codes)["close"]
+        instruments=codes
+    )["close"]
     new_nav = pf.nav(price)
     assert new_nav / old_nav > 0.9
 
@@ -99,19 +94,17 @@ def test_portfolio():
     pf = Portfolio(cash=0)
     codes = ["SH600006", "SH600021", "SH600607"]
     pf.positions = pd.Series([1000, 1000, 1000], index=codes, dtype=np.float64)
-    price = ds.query_trading_data(date="2011-11-01",
-                                  instruments=codes)["close"]
-    assert pf.nav(
-        price) < 3300  # Price of delisted stock will not include in nav
+    price = ds.query_trading_data(date="2011-11-01", instruments=codes)["close"]
+    assert pf.nav(price) < 3300  # Price of delisted stock will not include in nav
 
 
 def test_trading_policy():
-    ds = DataSource(start_date="2010-01-01",
-                    end_date="2020-01-01",
-                    market="csi500",
-                    data_handler=SimpleDataHandler(D.instruments("csi500"),
-                                                   start_time="2010-01-01",
-                                                   end_time="2020-01-01"))
+    ds = DataSource(
+        start_date="2010-01-01",
+        end_date="2020-01-01",
+        market="csi500",
+        data_handler=SimpleDataHandler(D.instruments("csi500"), start_time="2010-01-01", end_time="2020-01-01")
+    )
     pf = Portfolio(cash=800000)
 
     action = pd.Series({
@@ -121,7 +114,7 @@ def test_trading_policy():
     tp = TradingPolicy(data_source=ds)
     date = "2012-06-15"
     pf, log_change = tp.take_step(date, action, portfolio=pf)
-    assert log_change > np.log(0.9) and log_change < np.log(1.1)
+    assert log_change < 0 and log_change > -0.01
     price = ds.query_trading_data(date, pf.positions.index.tolist())["close"]
     old_nav = pf.nav(price)
 
@@ -138,13 +131,32 @@ def test_trading_policy():
     assert new_nav / old_nav < 0.81
 
 
+def test_trading_policy_with_benchmark_index():
+    ds = DataSource(
+        start_date="2010-01-01",
+        end_date="2020-01-01",
+        market="csi500",
+        data_handler=SimpleDataHandler(D.instruments("csi500"), start_time="2010-01-01", end_time="2020-01-01")
+    )
+    pf = Portfolio(cash=800000)
+
+    action = pd.Series({
+        "SH600006": 1.1,  # Buy
+        "SH600008": 0,
+    })
+    tp = TradingPolicy(data_source=ds, use_benchmark=True, benchmark_index="SH000905")
+    date = "2012-06-15"
+    pf, log_change = tp.take_step(date, action, portfolio=pf)
+    assert log_change > 0 and log_change < 0.02
+
+
 def test_trading_env():
-    ds = DataSource(start_date="2011-11-01",
-                    end_date="2011-11-08",
-                    market="csi500",
-                    data_handler=SimpleDataHandler(D.instruments("csi500"),
-                                                   start_time="2010-01-01",
-                                                   end_time="2020-01-01"))
+    ds = DataSource(
+        start_date="2011-11-01",
+        end_date="2011-11-08",
+        market="csi500",
+        data_handler=SimpleDataHandler(D.instruments("csi500"), start_time="2010-01-01", end_time="2020-01-01")
+    )
     tp = TradingPolicy(data_source=ds)
     env = TradingEnv(data_source=ds, trading_policy=tp, max_episode_steps=5)
     obs = env.reset()
@@ -164,10 +176,7 @@ def test_trading_env():
     os.mkdir(tempdir)
     try:
         recorder = TradingRecorder(data_source=ds, dirname=tempdir)
-        env = TradingEnv(data_source=ds,
-                         trading_policy=tp,
-                         max_episode_steps=5,
-                         recorder=recorder)
+        env = TradingEnv(data_source=ds, trading_policy=tp, max_episode_steps=5, recorder=recorder)
         obs = env.reset()
         for _ in range(5):
             action = pd.Series(np.random.rand(obs.shape[0]), index=obs.index)
@@ -200,15 +209,15 @@ def test_stable_stock_index():
         else:
             return ['sh600008', 'sh600021']
 
-    with patch.object(D, 'list_instruments',
-                      mock_list_instruments) as mock_method:
-        ds = DataSource(start_date=start_date,
-                        end_date=end_date,
-                        market="csi500",
-                        data_handler=SimpleDataHandler(
-                            ['sh600006', 'sh600021', "sh600008"],
-                            start_time="2010-01-01",
-                            end_time="2020-01-01"))
+    with patch.object(D, 'list_instruments', mock_list_instruments) as mock_method:
+        ds = DataSource(
+            start_date=start_date,
+            end_date=end_date,
+            market="csi500",
+            data_handler=SimpleDataHandler(
+                ['sh600006', 'sh600021', "sh600008"], start_time="2010-01-01", end_time="2020-01-01"
+            )
+        )
     tp = TradingPolicy(data_source=ds)
     env = TradingEnv(data_source=ds, trading_policy=tp, max_episode_steps=5)
     # Reset
@@ -225,17 +234,14 @@ def test_stable_stock_index():
 
 
 def test_random_sample_env():
-    ds = DataSource(start_date="2011-11-01",
-                    end_date="2011-11-08",
-                    market="csi500",
-                    data_handler=SimpleDataHandler(D.instruments("csi500"),
-                                                   start_time="2010-01-01",
-                                                   end_time="2020-01-01"))
+    ds = DataSource(
+        start_date="2011-11-01",
+        end_date="2011-11-08",
+        market="csi500",
+        data_handler=SimpleDataHandler(D.instruments("csi500"), start_time="2010-01-01", end_time="2020-01-01")
+    )
     tp = TradingPolicy(data_source=ds)
-    env = RandomSampleEnv(n_sample=1,
-                          data_source=ds,
-                          trading_policy=tp,
-                          max_episode_steps=5)
+    env = RandomSampleEnv(n_sample=1, data_source=ds, trading_policy=tp, max_episode_steps=5)
     obs = env.reset()
     assert obs.shape[0] == 1
     code = obs.index[0]
@@ -257,4 +263,4 @@ def test_portfolio_optimizer():
 
     topk = TopkOptimizer(10, equal_weight=False)
     weight = topk.get_weight(action=action)
-    assert weight.sum() == 1
+    assert round(weight.sum(), 6) == 1

@@ -12,7 +12,6 @@ from alphaminer.rl.ding_env import DingTradingEnv, DingMATradingEnv
 from alphaminer.rl.model.ma_model import MAVACv1, MAVACv2
 from ding.worker import InteractionSerialEvaluator, BaseLearner, EpisodeSerialCollector, SampleSerialCollector, NaiveReplayBuffer
 
-
 market = 'csi500'
 train_start_time = '2010-01-01'
 train_end_time = '2016-12-31'
@@ -22,17 +21,7 @@ eval_end_time = '2017-12-31'
 cash = 1000000
 stop_value = 1
 
-
-main_config = dict(
-    policy=dict(),
-    env=dict(
-        n_evaluator_episode=8,
-        stop_value=1,
-        manager=dict(
-            shared_memory=False,
-        )
-    )
-)
+main_config = dict(policy=dict(), env=dict(n_evaluator_episode=8, stop_value=1, manager=dict(shared_memory=False, )))
 main_config = EasyDict(main_config)
 
 
@@ -43,9 +32,7 @@ def get_env_config(args, market, start_time, end_time, env_cls=DingTradingEnv):
         market=market,
         start_date=start_time,
         end_date=end_time,
-        strategy=dict(
-            buy_top_n=args.top_n,
-        ),
+        strategy=dict(buy_top_n=args.top_n, ),
         data_handler=dict(
             type=None,
             market=market,
@@ -75,29 +62,19 @@ def get_policy_config(args, policy_cls, collector_cls, evaluator_cls, learner_cl
             ignore_done=True,
             learner=dict()
         ),
-        collect=dict(
-            n_episode=20,
-            discount_factor=0.999,
-            collector=dict(
-                get_train_sample=True,
-            )
-        ),
-        eval=dict(
-            evaluator=dict(
-                eval_freq=1000,
-            )
-        ),
+        collect=dict(n_episode=20, discount_factor=0.999, collector=dict(get_train_sample=True, )),
+        eval=dict(evaluator=dict(eval_freq=1000, )),
         model={
             'single': dict(
                 obs_shape={
-                    'basic': 500*6,
-                    '158': 500*158,
+                    'basic': 500 * 6,
+                    '158': 500 * 158,
                 }[args.env_type],
                 action_shape=500,
                 action_space='continuous',
                 encoder_hidden_size_list=[2048, 512, 256],
-                actor_head_hidden_size = 256,
-                critic_head_hidden_size = 256,
+                actor_head_hidden_size=256,
+                critic_head_hidden_size=256,
             ),
             'multi': dict(
                 agent_obs_shape={
@@ -105,14 +82,14 @@ def get_policy_config(args, policy_cls, collector_cls, evaluator_cls, learner_cl
                     '158': 158,
                 }[args.env_type],
                 global_obs_shape={
-                    'basic': 500*6,
-                    '158': 500*158,
+                    'basic': 500 * 6,
+                    '158': 500 * 158,
                 }[args.env_type],
                 action_shape=1,
             )
         }[args.action_type]
     )
-    
+
     ddpg_config = dict(
         cuda=True,
         action_space='continuous',
@@ -129,22 +106,16 @@ def get_policy_config(args, policy_cls, collector_cls, evaluator_cls, learner_cl
             n_sample=800,
             collector=dict(),
         ),
-        eval=dict(
-            evaluator=dict(
-                eval_freq=1000,
-            )
-        ),
-        other=dict(
-            replay_buffer=dict(
-                replay_buffer_size=200000,
-                periodic_thruput_seconds=300,
-            )
-        ),
+        eval=dict(evaluator=dict(eval_freq=1000, )),
+        other=dict(replay_buffer=dict(
+            replay_buffer_size=200000,
+            periodic_thruput_seconds=300,
+        )),
         model={
             'single': dict(
                 obs_shape={
-                    'basic': 500*6,
-                    '158': 500*158,
+                    'basic': 500 * 6,
+                    '158': 500 * 158,
                 }[args.env_type],
                 action_shape=500,
                 action_space='regression',
@@ -159,8 +130,8 @@ def get_policy_config(args, policy_cls, collector_cls, evaluator_cls, learner_cl
                     '158': 158,
                 }[args.env_type],
                 global_obs_shape={
-                    'basic': 500*6,
-                    '158': 500*158,
+                    'basic': 500 * 6,
+                    '158': 500 * 158,
                 }[args.env_type],
                 action_shape=1,
             )
@@ -177,7 +148,9 @@ def get_policy_config(args, policy_cls, collector_cls, evaluator_cls, learner_cl
     policy_config.eval.evaluator = deep_merge_dicts(evaluator_cls.default_config(), policy_config.eval.evaluator)
     policy_config.learn.learner = deep_merge_dicts(learner_cls.default_config(), policy_config.learn.learner)
     if buffer_cls is not None:
-        policy_config.other.replay_buffer = deep_merge_dicts(buffer_cls.default_config(), policy_config.other.replay_buffer)
+        policy_config.other.replay_buffer = deep_merge_dicts(
+            buffer_cls.default_config(), policy_config.other.replay_buffer
+        )
 
     return policy_config
 
@@ -201,7 +174,9 @@ def main(cfg, args):
     if args.action_type == 'multi':
         model_class = MAVACv2
 
-    policy_cfg = get_policy_config(args, policy_class, collector_class, InteractionSerialEvaluator, BaseLearner, buffer_class)
+    policy_cfg = get_policy_config(
+        args, policy_class, collector_class, InteractionSerialEvaluator, BaseLearner, buffer_class
+    )
     policy_cfg.eval.evaluator.n_episode = cfg.env.n_evaluator_episode
     policy_cfg.eval.evaluator.stop_value = cfg.env.stop_value
     if model_class is not None:
@@ -228,7 +203,8 @@ def main(cfg, args):
     learner = BaseLearner(policy_cfg.learn.learner, policy.learn_mode, tb_logger, exp_name=args.exp_name)
 
     collector = collector_class(
-        policy_cfg.collect.collector, collector_env, policy.collect_mode, tb_logger, args.exp_name)
+        policy_cfg.collect.collector, collector_env, policy.collect_mode, tb_logger, args.exp_name
+    )
 
     evaluator = InteractionSerialEvaluator(
         policy_cfg.eval.evaluator, evaluator_env, policy.eval_mode, tb_logger, exp_name=args.exp_name
@@ -249,7 +225,7 @@ def main(cfg, args):
         elif args.policy == 'ddpg':
             buffer.push(new_data, cur_collector_envstep=collector.envstep)
             for i in range(policy_cfg.learn.update_per_collect):
-            # Learner will train ``update_per_collect`` times in one iteration.
+                # Learner will train ``update_per_collect`` times in one iteration.
                 train_data = buffer.sample(policy_cfg.learn.batch_size, learner.train_iter)
                 if train_data is None:
                     # It is possible that replay buffer's data count is too few to train ``update_per_collect`` times
@@ -272,7 +248,12 @@ if __name__ == '__main__':
     parser.add_argument('-p', '--policy', choices=['ppo', 'ddpg'], default='ppo')
     parser.add_argument('-e', '--env-type', choices=['basic', '158'], default='basic')
     parser.add_argument('-a', '--action-type', choices=['single', 'multi'], default='single')
-    parser.add_argument('-t', '--top-n', type=int, default=20,)
+    parser.add_argument(
+        '-t',
+        '--top-n',
+        type=int,
+        default=20,
+    )
     parser.add_argument('-ms', '--max-episode-steps', type=int, default=40)
     parser.add_argument('-cn', '--collect-env-num', type=int, default=1)
     parser.add_argument('-en', '--evaluate-env-num', type=int, default=1)

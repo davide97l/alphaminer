@@ -38,7 +38,7 @@ class ReducedRegressionHead(nn.Module):
         self.final_tanh = final_tanh
         if self.final_tanh:
             self.tanh = nn.Tanh()
-    
+
     def forward(self, x: torch.Tensor) -> Dict:
         x = self.main(x)
         x = self.last(x)

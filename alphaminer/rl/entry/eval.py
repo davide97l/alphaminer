@@ -4,6 +4,7 @@ import argparse
 import logging
 from tensorboardX import SummaryWriter
 from easydict import EasyDict
+from copy import deepcopy
 
 from ding.envs import SyncSubprocessEnvManager, BaseEnvManager
 from ding.policy import PPOPolicy, DDPGPolicy
@@ -11,24 +12,21 @@ from ding.utils import deep_merge_dicts, set_pkg_seed
 from alphaminer.rl.ding_env import DingTradingEnv, DingMATradingEnv
 from alphaminer.rl.model.mappo import MAVACv1, MAVACv2
 from alphaminer.rl.entry.mappo_train import get_env_config, get_policy_config
+from alphaminer.rl.entry.utils import default_exp_name
 import torch
 from ding.worker import InteractionSerialEvaluator, BaseLearner, EpisodeSerialCollector, SampleSerialCollector, NaiveReplayBuffer
-
 
 market = 'csi500'
 eval_start_time = '2019-01-01'
 eval_end_time = '2022-06-30'
 stop_value = 1000
 
-
 main_config = dict(
     policy=dict(),
     env=dict(
         n_evaluator_episode=1,
         stop_value=stop_value,
-        manager=dict(
-            shared_memory=False,
-        ),
+        manager=dict(shared_memory=False, ),
         recorder=dict(
             path="./records",
             exp_name=None,
@@ -63,7 +61,9 @@ def main(cfg, args):
     if args.action_type == 'multi':
         model_class = MAVACv2
 
-    policy_cfg = get_policy_config(args, policy_class, collector_class, InteractionSerialEvaluator, BaseLearner, buffer_class)
+    policy_cfg = get_policy_config(
+        args, policy_class, collector_class, InteractionSerialEvaluator, BaseLearner, buffer_class
+    )
     policy_cfg.eval.evaluator.n_episode = cfg.env.n_evaluator_episode
     policy_cfg.eval.evaluator.stop_value = cfg.env.stop_value
     policy_cfg.load_path = args.load_path
@@ -75,8 +75,15 @@ def main(cfg, args):
         model = None
     policy = policy_class(policy_cfg, model=model)
     if policy_cfg.load_path is not None:
-        policy.eval_mode.load_state_dict(
-            torch.load(policy_cfg.load_path, map_location='cuda' if torch.cuda.is_available() else 'cpu'))
+        state_dict = torch.load(policy_cfg.load_path, map_location='cuda' if torch.cuda.is_available() else 'cpu')
+        new_state_dict = deepcopy(state_dict)
+        for k, v in state_dict['model'].items():
+            if 'module.' in k:
+                new_k = k[7:]  # remove `module.`
+                new_state_dict['model'][new_k] = v
+                del new_state_dict['model'][k]
+        # load params
+        policy.eval_mode.load_state_dict(new_state_dict)
 
     evaluate_env_temp = env_class(eval_env_cfg)
     evaluator_env = SyncSubprocessEnvManager(
@@ -96,21 +103,30 @@ def main(cfg, args):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='trading rl train')
+    parser = argparse.ArgumentParser(description='trading rl backtesting')
     parser.add_argument('-p', '--policy', choices=['ppo', 'ddpg'], default='ppo')
-    parser.add_argument('-e', '--env-type', choices=['basic', '158', 'sample'], default='158')
+    parser.add_argument('-e', '--env-type', choices=['basic', '158', 'guotai'], default='158')
     parser.add_argument('-a', '--action-type', choices=['single', 'multi'], default='multi')
-    parser.add_argument('-t', '--top-n', type=int, default=20,)  # remember to change this according to the loaded policy
+    parser.add_argument(
+        '-t',
+        '--top-n',
+        type=int,
+        default=20,
+    )  # remember to change this according to the loaded policy
     parser.add_argument('-en', '--evaluate-env-num', type=int, default=1)
     parser.add_argument('-s', '--seed', type=int, default=0)
     parser.add_argument('--start-time', type=str, default='2019-01-01')
     parser.add_argument('--end-time', type=str, default='2022-06-30')
-    parser.add_argument('--exp-name', type=str, default='eval')
+    parser.add_argument('--exp-name', type=str, default=None)
     parser.add_argument('--load-path', type=str, default=None)
     parser.add_argument('-cs', '--critic-size', type=int, default=None)
     parser.add_argument('-ss', '--sample-size', type=int, default=None)
     parser.add_argument('-sl', '--slippage', type=float, default=0.00246)
+    parser.add_argument('-nc', '--no-cost', action='store_false')
+    parser.add_argument('--data-path', type=str, default=None)
     parser.add_argument('-sm', '--softmax', action='store_true')
     args = parser.parse_args()
-    args.max_episode_steps = 0
+    args.max_episode_steps = 0  # eval on the whole eval data
+    if args.exp_name is None:
+        args.exp_name = default_exp_name('eval', args)
     main(main_config, args)

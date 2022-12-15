@@ -13,22 +13,22 @@ class MAQACv1(nn.Module):
     mode = ['compute_actor', 'compute_critic']
 
     def __init__(
-            self,
-            agent_obs_shape: Union[int, SequenceType],
-            global_obs_shape: Union[int, SequenceType],
-            action_shape: Union[int, SequenceType],
-            agent_num: int,
-            twin_critic: bool = False,
-            actor_encoder_hidden_size_list: SequenceType = [128, 128, 64],
-            critic_encoder_hidden_size_list: SequenceType = [128, 128, 64],
-            actor_head_hidden_size: int = 64,
-            actor_head_layer_num: int = 1,
-            critic_head_hidden_size: int = 64,
-            critic_head_layer_num: int = 1,
-            activation: Optional[nn.Module] = nn.ReLU(),
-            norm_type: Optional[str] = None,
-            sigma_type: Optional[str] = 'independent',
-            bound_type: Optional[str] = None,
+        self,
+        agent_obs_shape: Union[int, SequenceType],
+        global_obs_shape: Union[int, SequenceType],
+        action_shape: Union[int, SequenceType],
+        agent_num: int,
+        twin_critic: bool = False,
+        actor_encoder_hidden_size_list: SequenceType = [128, 128, 64],
+        critic_encoder_hidden_size_list: SequenceType = [128, 128, 64],
+        actor_head_hidden_size: int = 64,
+        actor_head_layer_num: int = 1,
+        critic_head_hidden_size: int = 64,
+        critic_head_layer_num: int = 1,
+        activation: Optional[nn.Module] = nn.ReLU(),
+        norm_type: Optional[str] = None,
+        sigma_type: Optional[str] = 'independent',
+        bound_type: Optional[str] = None,
     ) -> None:
         super().__init__()
         agent_obs_shape: int = squeeze(agent_obs_shape)
@@ -44,12 +44,12 @@ class MAQACv1(nn.Module):
         )
 
         self.actor_head = RegressionHead(
-                    actor_head_hidden_size,
-                    action_shape,
-                    actor_head_layer_num,
-                    final_tanh=True,
-                    activation=activation,
-                    norm_type=norm_type
+            actor_head_hidden_size,
+            action_shape,
+            actor_head_layer_num,
+            final_tanh=True,
+            activation=activation,
+            norm_type=norm_type
         )
 
         critic_input_size = global_obs_shape + action_shape * agent_num
@@ -68,11 +68,11 @@ class MAQACv1(nn.Module):
         self.critic = [self.critic_encoder, self.critic_head]
         self.actor = nn.ModuleList(self.actor)
         self.critic = nn.ModuleList(self.critic)
-    
+
     def forward(self, inputs: Union[torch.Tensor, Dict], mode: str) -> Dict:
         assert mode in self.mode, "not support forward mode: {}/{}".format(mode, self.mode)
         return getattr(self, mode)(inputs)
-    
+
     def compute_actor(self, x: torch.Tensor) -> Dict:
         x = x['agent_state']
         x = self.actor_encoder(x)
@@ -80,7 +80,7 @@ class MAQACv1(nn.Module):
         # for k in x.keys():
         #     x[k] = x[k].squeeze(-1)
         return {'action': x['pred']}
-    
+
     def compute_critic(self, inputs: Dict) -> Dict:
         obs, action = inputs['obs']['global_state'], inputs['action']
         if len(action.shape) == 1:  # (B, ) -> (B, 1)
@@ -124,7 +124,12 @@ class MAQACv2(nn.Module):
         )
 
         self.critic_head = ReducedRegressionHead(
-            (encoder_hidden_size_list[-1] + action_shape) * agent_num, critic_head_hidden_size, 1, critic_head_layer_num, activation=activation, norm_type=norm_type
+            (encoder_hidden_size_list[-1] + action_shape) * agent_num,
+            critic_head_hidden_size,
+            1,
+            critic_head_layer_num,
+            activation=activation,
+            norm_type=norm_type
         )
 
         self.actor_head = RegressionHead(
@@ -143,7 +148,7 @@ class MAQACv2(nn.Module):
     def forward(self, inputs: Union[torch.Tensor, Dict], mode: str) -> Dict:
         assert mode in self.mode, "not support forward mode: {}/{}".format(mode, self.mode)
         return getattr(self, mode)(inputs)
-    
+
     def compute_actor(self, x: torch.Tensor) -> Dict:
         x = x['agent_state']
         x = self.encoder(x)
@@ -151,7 +156,7 @@ class MAQACv2(nn.Module):
         # for k in x.keys():
         #     x[k] = x[k].squeeze(-1)
         return {'action': x['pred']}
-    
+
     def compute_critic(self, inputs: Dict) -> Dict:
         obs, action = inputs['obs']['agent_state'], inputs['action']
         if len(action.shape) == 1:  # (B, ) -> (B, 1)

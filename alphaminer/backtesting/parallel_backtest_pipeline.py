@@ -6,7 +6,6 @@ from os.path import isfile, join
 from joblib import Parallel, delayed
 import time
 
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--config_path', type=str, required=True)
@@ -18,7 +17,8 @@ if __name__ == '__main__':
     configs = [f for f in listdir(config_path) if isfile(join(config_path, f)) and f.endswith('.py')]
 
     start_time = time.time()
-    result = Parallel(n_jobs=args.njobs)(delayed(pipeline)
-             (os.path.join(config_path, config), args.save_dir, True) for config in configs)
+    result = Parallel(n_jobs=args.njobs)(
+        delayed(pipeline)(os.path.join(config_path, config), args.save_dir, True) for config in configs
+    )
     tot_time = time.time() - start_time
     print('Running time:', tot_time)

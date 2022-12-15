@@ -5,9 +5,7 @@ from os import path
 import pandas as pd
 
 
-def check_alpha(alpha: pd.Series,
-                min_count: int = 50,
-                boundary: List[float] = [-1, 1]):
+def check_alpha(alpha: pd.Series, min_count: int = 50, boundary: List[float] = [-1, 1]):
     """
     Default parameters should ensure the factor has no NaN value and fall in the range of -1 to 1.
     """
@@ -34,10 +32,7 @@ def test_gtja_alpha191():
     df_index.set_index("date", inplace=True)
 
     # Start test
-    gtja = GTJA_191("2022-08-01",
-                    security=index_stocks,
-                    price=df,
-                    benchmark_price=df_index)
+    gtja = GTJA_191("2022-08-01", security=index_stocks, price=df, benchmark_price=df_index)
     check_alpha(gtja.alpha_001())
     check_alpha(gtja.alpha_002(), min_count=48, boundary=[-100, 100])
     check_alpha(gtja.alpha_003(), boundary=[-300, 100])

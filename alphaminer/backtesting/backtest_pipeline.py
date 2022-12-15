@@ -27,7 +27,9 @@ def pipeline(config_path, save_dir: str = '', cache_dataset: bool = True):
         config_name = str(config_path.split('/')[-1].split('.')[0])
         spec = importlib.util.spec_from_file_location(config_name, config_path)
         config = importlib.util.module_from_spec(spec)  # creates a new module based on spec
-        spec.loader.exec_module(config)  # executes the module in its own namespace when a module is imported or reloaded.
+        spec.loader.exec_module(
+            config
+        )  # executes the module in its own namespace when a module is imported or reloaded.
     elif isinstance(config_path, dict):
         config = config_path
         config_name = config["name"]

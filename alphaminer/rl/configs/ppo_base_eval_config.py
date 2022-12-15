@@ -1,8 +1,14 @@
 from easydict import EasyDict
 
 infer_processors = [
-    {"class": "Fillna", "kwargs": {}},
-    {"class": "ZScoreNorm", "kwargs": {}},
+    {
+        "class": "Fillna",
+        "kwargs": {}
+    },
+    {
+        "class": "ZScoreNorm",
+        "kwargs": {}
+    },
 ]
 start_time = '2020-01-01'
 end_time = '2022-06-01'
@@ -22,9 +28,7 @@ trading_ppo_config = dict(
         start_date=start_time,
         end_date=end_time,
         market=market,
-        strategy=dict(
-            buy_top_n=10,
-        ),
+        strategy=dict(buy_top_n=10, ),
         data_handler=dict(
             market=market,
             start_time=start_time,
@@ -35,9 +39,7 @@ trading_ppo_config = dict(
             infer_processors=infer_processors,
             learn_processors=[],
         ),
-        recorder=dict(
-            path="./records",
-        ),
+        recorder=dict(path="./records", ),
         # The path to save the metrics replay
         # metrics_path='./trading_ppo_seed0/metrics',
     ),

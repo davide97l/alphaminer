@@ -3,8 +3,14 @@ from qlib.data import D
 import argparse
 
 
-def qlib_data(start='2000-01-01', end='2022-07-01', features=None, data_source='~/.qlib/qlib_data/cn_data',
-              qlib_normalization=False, save_path='qlib_data.csv'):
+def qlib_data(
+    start='2000-01-01',
+    end='2022-07-01',
+    features=None,
+    data_source='~/.qlib/qlib_data/cn_data',
+    qlib_normalization=False,
+    save_path='qlib_data.csv'
+):
     """
     Utility to retrieve data from Qlib as pd.Dataframe adapted to Alphaminer RL env format.
     Qlib data should be obtained from crowd source in order to preserve the quality of the data:
@@ -40,5 +46,10 @@ if __name__ == '__main__':
     parser.add_argument('--save_path', type=str, default='qlib_data.csv')
     parser.add_argument('--qlib_normalization', action='store_true')
     args = parser.parse_known_args()[0]
-    qlib_data(start=args.start, end=args.end, data_source=args.data_source, save_path=args.save_path,
-              qlib_normalization=args.qlib_normalization)
+    qlib_data(
+        start=args.start,
+        end=args.end,
+        data_source=args.data_source,
+        save_path=args.save_path,
+        qlib_normalization=args.qlib_normalization
+    )

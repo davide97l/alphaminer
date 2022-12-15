@@ -1,8 +1,14 @@
 from easydict import EasyDict
 
 infer_processors = [
-    {"class": "Fillna", "kwargs": {}},
-    {"class": "ZScoreNorm", "kwargs": {}},
+    {
+        "class": "Fillna",
+        "kwargs": {}
+    },
+    {
+        "class": "ZScoreNorm",
+        "kwargs": {}
+    },
 ]
 start_time = '2022-01-01'
 end_time = '2022-06-01'
@@ -22,11 +28,9 @@ trading_ppo_config = dict(
         start_date=start_time,
         end_date=end_time,
         market=market,
-        strategy=dict(
-            buy_top_n=10,
-        ),
+        strategy=dict(buy_top_n=10, ),
         data_handler=dict(
-            market=market,
+            instruments=market,
             start_time=start_time,
             end_time=end_time,
             alphas=None,

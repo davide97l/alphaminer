@@ -14,9 +14,7 @@ trading_ppo_config = dict(
         start_date='2020-01-01',
         end_date='2020-02-01',
         market='csi500',
-        strategy=dict(
-            buy_top_n=1,
-        ),
+        strategy=dict(buy_top_n=1, ),
         # The path to save the metrics replay
         # metrics_path='./trading_ppo_seed0/metrics',
     ),

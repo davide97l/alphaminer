@@ -21,10 +21,10 @@ def group_return(pred_label: pd.DataFrame = None, reverse: bool = False, N: int 
     # Group
     t_df = pd.DataFrame(
         {
-            "Group%d"
-            % (i + 1): pred_label_drop.groupby(level="datetime")["label"].apply(
-                lambda x: x[len(x) // N * i : len(x) // N * (i + 1)].mean()  # pylint: disable=W0640
-            )
+            "Group%d" % (i + 1): pred_label_drop.groupby(
+                level="datetime"
+            )["label"].apply(lambda x: x[len(x) // N * i:len(x) // N * (i + 1)].mean()  # pylint: disable=W0640
+                             )
             for i in range(N)
         }
     )
@@ -155,15 +155,16 @@ if __name__ == '__main__':
     group 1..5: 1..5
     long-short: 6
     '''
-    seqs = [[1, 2, 3, 4, 5],  # perfect positive correlation
-            [5, 4, 3, 2, 1],  # perfect negative correlation
-            [1, 2, 3, 5, 4],  # almost perfect positive correlation
-            [5, 3, 2, 1, 4],  # low correlation
-            [3, 4, 1, 5, 2],  # completely uncorrelated
-            [1, 2, 3, 7, 5, 4, 6],
-            [1, 2, 3, 4, 5, 6, 7],
-            [1, 2, 3, 6, 5, 4],
-            [1, 2, 3, 4, 6, 5]
-            ]
+    seqs = [
+        [1, 2, 3, 4, 5],  # perfect positive correlation
+        [5, 4, 3, 2, 1],  # perfect negative correlation
+        [1, 2, 3, 5, 4],  # almost perfect positive correlation
+        [5, 3, 2, 1, 4],  # low correlation
+        [3, 4, 1, 5, 2],  # completely uncorrelated
+        [1, 2, 3, 7, 5, 4, 6],
+        [1, 2, 3, 4, 5, 6, 7],
+        [1, 2, 3, 6, 5, 4],
+        [1, 2, 3, 4, 6, 5]
+    ]
     for s in seqs:
         print(s, cum_ret_groups_corr(s))

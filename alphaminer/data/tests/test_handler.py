@@ -16,9 +16,10 @@ qlib.init(provider_uri=get_data_path(), region="cn")
 
 def test_data_handler():
     alphas = [
-        ['(EMA($close, 12) - EMA($close, 26))/$close - EMA((EMA($close, 12) - EMA($close, 26))/$close, 9)/$close',
-         '$high - $low'],
-        ['MACD', 'DELTA']
+        [
+            '(EMA($close, 12) - EMA($close, 26))/$close - EMA((EMA($close, 12) - EMA($close, 26))/$close, 9)/$close',
+            '$high - $low'
+        ], ['MACD', 'DELTA']
     ]
     dh = AlphaMinerHandler(
         start_time="2010-01-01",
@@ -35,8 +36,14 @@ def test_data_handler():
     assert (data['$high'] - data['$low']).equals(data['DELTA'])
 
     infer_processors = [
-        {"class": "Fillna", "kwargs": {}},
-        {"class": "ZScoreNorm", "kwargs": {}},
+        {
+            "class": "Fillna",
+            "kwargs": {}
+        },
+        {
+            "class": "ZScoreNorm",
+            "kwargs": {}
+        },
     ]
 
     dh = AlphaMinerHandler(

@@ -11,7 +11,6 @@ from ding.utils import deep_merge_dicts, set_pkg_seed
 from alphaminer.rl.ding_env import DingTradingEnv
 from ding.worker import InteractionSerialEvaluator, BaseLearner, EpisodeSerialCollector, SampleSerialCollector, NaiveReplayBuffer
 
-
 market = 'csi500'
 train_start_time = '2010-01-01'
 train_end_time = '2016-12-31'
@@ -21,17 +20,7 @@ eval_end_time = '2017-12-31'
 cash = 1000000
 stop_value = 1
 
-
-main_config = dict(
-    policy=dict(),
-    env=dict(
-        n_evaluator_episode=8,
-        stop_value=1,
-        manager=dict(
-            shared_memory=False,
-        )
-    )
-)
+main_config = dict(policy=dict(), env=dict(n_evaluator_episode=8, stop_value=1, manager=dict(shared_memory=False, )))
 main_config = EasyDict(main_config)
 
 
@@ -43,9 +32,7 @@ def get_env_config(args, market, start_time, end_time, env_cls=DingTradingEnv):
         start_date=start_time,
         end_date=end_time,
         random_sample=(args.env_type == 'sample'),
-        strategy=dict(
-            buy_top_n=args.top_n,
-        ),
+        strategy=dict(buy_top_n=args.top_n, ),
         data_handler=dict(
             type=None,
             market=market,
@@ -77,28 +64,20 @@ def get_policy_config(args, policy_cls, collector_cls, evaluator_cls, learner_cl
             learner=dict()
         ),
         collect=dict(
-            n_episode=args.collect_env_num * 2,
-            discount_factor=0.999,
-            collector=dict(
-                get_train_sample=True,
-            )
+            n_episode=args.collect_env_num * 2, discount_factor=0.999, collector=dict(get_train_sample=True, )
         ),
-        eval=dict(
-            evaluator=dict(
-                eval_freq=1000,
-            )
-        ),
+        eval=dict(evaluator=dict(eval_freq=1000, )),
         model=dict(
             obs_shape={
-                'basic': 500*6,
-                '158': 500*158,
-                'sample': 50*158,
+                'basic': 500 * 6,
+                '158': 500 * 158,
+                'sample': 50 * 158,
             }[args.env_type],
             action_shape=500,
             action_space='continuous',
             encoder_hidden_size_list=[2048, 512, 256],
-            actor_head_hidden_size = 256,
-            critic_head_hidden_size = 256,
+            actor_head_hidden_size=256,
+            critic_head_hidden_size=256,
         ),
     )
 
@@ -109,7 +88,9 @@ def get_policy_config(args, policy_cls, collector_cls, evaluator_cls, learner_cl
     policy_config.eval.evaluator = deep_merge_dicts(evaluator_cls.default_config(), policy_config.eval.evaluator)
     policy_config.learn.learner = deep_merge_dicts(learner_cls.default_config(), policy_config.learn.learner)
     if buffer_cls is not None:
-        policy_config.other.replay_buffer = deep_merge_dicts(buffer_cls.default_config(), policy_config.other.replay_buffer)
+        policy_config.other.replay_buffer = deep_merge_dicts(
+            buffer_cls.default_config(), policy_config.other.replay_buffer
+        )
 
     return policy_config
 
@@ -145,7 +126,8 @@ def main(cfg, args):
     learner = BaseLearner(policy_cfg.learn.learner, policy.learn_mode, tb_logger, exp_name=args.exp_name)
 
     collector = EpisodeSerialCollector(
-        policy_cfg.collect.collector, collector_env, policy.collect_mode, tb_logger, args.exp_name)
+        policy_cfg.collect.collector, collector_env, policy.collect_mode, tb_logger, args.exp_name
+    )
 
     evaluator = InteractionSerialEvaluator(
         policy_cfg.eval.evaluator, evaluator_env, policy.eval_mode, tb_logger, exp_name=args.exp_name
@@ -168,7 +150,12 @@ def main(cfg, args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='trading rl train')
     parser.add_argument('-e', '--env-type', choices=['basic', '158', 'sample'], default='basic')
-    parser.add_argument('-t', '--top-n', type=int, default=20,)
+    parser.add_argument(
+        '-t',
+        '--top-n',
+        type=int,
+        default=20,
+    )
     parser.add_argument('-ms', '--max-episode-steps', type=int, default=40)
     parser.add_argument('-cn', '--collect-env-num', type=int, default=1)
     parser.add_argument('-en', '--evaluate-env-num', type=int, default=1)

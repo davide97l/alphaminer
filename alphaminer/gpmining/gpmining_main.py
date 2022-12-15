@@ -9,7 +9,6 @@ from alphaminer.gpmining.my_functions import random_n_functions, n_in_data_funct
 from alphaminer.gpmining.my_fitness import top10pct_return_fitness
 from alphaminer.gpmining.mining_utils import draw_alpha_graph, draw_statistics, get_data
 
-
 market = "csi500"
 fields = ['$change', '$open', '$close', '$high', '$low']
 return_shifts = [5]
@@ -35,11 +34,12 @@ ts_function = []
 d_list = [1, 2, 3, 5, 8, 10]
 verbose = 2
 
-exp_name = 'g{}_nindata_top10new_p{}_d{}_{}_t{}_v0'.format(generations, population_size, init_depth[0], init_depth[1], tournament_size)
+exp_name = 'g{}_nindata_top10new_p{}_d{}_{}_t{}_v0'.format(
+    generations, population_size, init_depth[0], init_depth[1], tournament_size
+)
 cur_time = datetime.today().isoformat('_').split('.')[0].replace(':', '-')
 exp_name = exp_name + '_' + cur_time
 # exp_name = 'debug'
-
 
 if __name__ == '__main__':
     qlib.init()  # must init before running all the other commands
@@ -58,7 +58,7 @@ if __name__ == '__main__':
     for d in d_list:
         train[str(d)] = d
         feature_names.append(str(d))
-    
+
     print(train)
     print(label)
 
@@ -92,7 +92,7 @@ if __name__ == '__main__':
     # model.stopping_criteria = 1e8
     # model.warm_start = True
     model.fit(train, label)
-    
+
     gp_statistics = pd.DataFrame(model.run_details_)
 
     print(gp_statistics)
@@ -106,7 +106,7 @@ if __name__ == '__main__':
     for i, a in enumerate(best_alphas):
         alpha_name = 'alpha_' + str(i + 1)
         best_alpha_dict[alpha_name] = {'fitness': a.fitness_, 'expression': a, 'depth': a.depth_, 'length': a.length_}
-    
+
     best_alpha_data = pd.DataFrame(best_alpha_dict).T.sort_values(by='fitness', ascending=False)
     print(best_alpha_data)
     best_alpha_name = best_alpha_data.index[0]

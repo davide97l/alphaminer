@@ -2,7 +2,6 @@ import pandas as pd
 import numpy as np
 from gplearn.fitness import make_fitness
 
-
 # def _top10pct_return_fitness(y, y_pred, w):
 #     x1 = pd.Series(y.flatten())
 #     x2 = pd.Series(y_pred.flatten())

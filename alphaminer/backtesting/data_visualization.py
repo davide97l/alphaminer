@@ -5,7 +5,7 @@ from pandas_profiling import ProfileReport
 import argparse
 import pandas as pd
 
-# usage example: 
+# usage example:
 # python backtesting/data_visualization.py --config ../configs/config_lightgbm_cohlv_csi500.py --stock SH600000  --save_dataset
 
 if __name__ == '__main__':

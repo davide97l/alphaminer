@@ -4,7 +4,6 @@ import pandas as pd
 from gplearn.genetic import SymbolicRegressor, SymbolicTransformer
 from alphaminer.gpmining.mining_utils import draw_alpha_graph
 
-
 model_path = 'model_debug.pkl'
 
 with open(model_path, 'rb') as f:

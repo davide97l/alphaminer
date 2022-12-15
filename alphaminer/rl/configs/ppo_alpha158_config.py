@@ -1,7 +1,6 @@
 from easydict import EasyDict
 from alphaminer.rl.ding_env import DingTradingEnv
 
-
 train_start_time = '2008-01-01'
 train_end_time = '2016-12-31'
 test_start_time = '2017-01-01'
@@ -27,9 +26,7 @@ def make_env_config(start_time, end_time):
         start_date=start_time,
         end_date=end_time,
         market=market,
-        strategy=dict(
-            buy_top_n=buy_top_n,
-        ),
+        strategy=dict(buy_top_n=buy_top_n, ),
         data_handler=dict(
             type='alpha158',
             instruments=market,
@@ -98,7 +95,8 @@ if __name__ == "__main__":
     import qlib
 
     qlib.init(provider_uri='~/.qlib/qlib_data/cn_data', region="cn")
-    env_setting = [DingTradingEnv,
-                  [make_env_config(train_start_time, train_end_time)],
-                  [make_env_config(test_start_time, test_end_time)]]
+    env_setting = [
+        DingTradingEnv, [make_env_config(train_start_time, train_end_time)],
+        [make_env_config(test_start_time, test_end_time)]
+    ]
     serial_pipeline_onpolicy((main_config, create_config), env_setting=env_setting, seed=0)

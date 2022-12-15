@@ -23,7 +23,7 @@ def gain_to_pain_ratio(r):
     r = r.groupby(pd.Grouper(freq='M')).mean().values
     r_pos = sum(r[r > 0])
     r_neg = sum(r[r < 0])
-    return r_pos/(-r_neg)
+    return r_pos / (-r_neg)
 
 
 def common_sense_ratio(r):
@@ -37,5 +37,4 @@ def beta(r, b):
 
 
 def ann_cum_ret(ret, years: int):
-    return np.power(ret + 1, 1/years) - 1
-
+    return np.power(ret + 1, 1 / years) - 1

@@ -10,14 +10,10 @@ def get_data(market, fields, start_time, end_time, return_shifts=[5]):
     for r in return_shifts:
         fields.append('Ref($close, -{})/$close - 1'.format(r))
 
-    all_data = D.features(
-        instruments=instruments, 
-        fields=fields, 
-        start_time=start_time,
-        end_time=end_time
-    )
+    all_data = D.features(instruments=instruments, fields=fields, start_time=start_time, end_time=end_time)
     all_data = all_data.rename(
-        columns={'Ref($close, -{})/$close - 1'.format(r): 'return_{}'.format(r) for r in return_shifts}
+        columns={'Ref($close, -{})/$close - 1'.format(r): 'return_{}'.format(r)
+                 for r in return_shifts}
     )
     all_data = all_data.dropna(axis=0)
     # all_data = all_data.interpolate()

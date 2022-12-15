@@ -59,7 +59,8 @@ def benchmark_metrics(config_name, analysis_df, ic_df, rankic_df, pred_label_df,
         'sortino_wc': mean_wc / r_wc_neg_std,
         'y_sortino_ratio': mean / r_neg_std * np.sqrt(252),
         'y_sortino_wc': mean_wc / r_wc_neg_std * np.sqrt(252),
-        'cumret_&_time_r2_score': r2(np.array(list(range(len(r)))).reshape(-1, 1), cum_ret),  # r2 score of cum_return and time
+        'cumret_&_time_r2_score': r2(np.array(list(range(len(r)))).reshape(-1, 1),
+                                     cum_ret),  # r2 score of cum_return and time
         'tail_ratio': tail_ratio(r),
         'gain_to_pain_ratio': gain_to_pain_ratio(r),
         'common_sense_ratio': common_sense_ratio(r),
