@@ -40,7 +40,7 @@ class DingTradingEnv(BaseEnv):
         market='csi500',
         exp_name=None,
         strategy=dict(buy_top_n=10, ),
-        portfolio_optimizer=("Topk", {
+        portfolio_optimizer=("topk", {
             "topk": 10,
             "equal_weight": True
         }),

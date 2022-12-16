@@ -247,7 +247,18 @@ class TopkOptimizer(PortfolioOptimizer):
             return action
 
 
-PORTFOLIO_OPTIMISERS = {"Topk": TopkOptimizer}
+class NoOptimizer(PortfolioOptimizer):
+    """
+    Use action as weight directly.
+    """
+    def __init__(self) -> None:
+        super().__init__()
+
+    def get_weight(self, action: pd.Series) -> pd.Series:
+        return action
+
+
+PORTFOLIO_OPTIMISERS = {"topk": TopkOptimizer, "no": NoOptimizer}
 
 
 class TradingPolicy:

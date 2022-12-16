@@ -52,6 +52,8 @@ def get_env_config(args, market, start_time, end_time, env_cls=DingTradingEnv):
             start_time=start_time,
             end_time=end_time,
         ),
+        portfolio_optimizer=("no", {
+        }),
         action_softmax=args.softmax,
     )
     env_config = EasyDict(env_config)

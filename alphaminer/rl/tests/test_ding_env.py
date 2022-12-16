@@ -45,8 +45,10 @@ infer_processors = [
         "kwargs": {}
     },
 ]
-start_time = '2010-01-01'
-end_time = '2010-10-01'
+#start_time = '2010-01-01'
+#end_time = '2010-10-01'
+start_time = "2019-01-02"
+end_time = "2019-02-10"
 
 qlib_config = dict(
     env_id='Trading-v0',
@@ -71,7 +73,7 @@ qlib_config = dict(
 
 alpha_config = dict(
     env_id='Trading-v0',
-    max_episode_steps=100,
+    max_episode_steps=0,
     cash=1000000,
     start_date=start_time,
     end_date=end_time,
