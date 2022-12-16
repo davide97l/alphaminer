@@ -48,7 +48,7 @@ infer_processors = [
 #start_time = '2010-01-01'
 #end_time = '2010-10-01'
 start_time = "2019-01-02"
-end_time = "2019-02-10"
+end_time = "2019-10-10"
 
 qlib_config = dict(
     env_id='Trading-v0',
@@ -168,7 +168,7 @@ def test_ding_trading_qlib_csi500():
 
 @pytest.mark.parametrize("alpha", ['158', '360'])
 def test_ding_trading_alpha158_csi500(alpha):
-    qlib.init(provider_uri='~/.qlib/qlib_data/cn_data', region="cn")
+    qlib.init(provider_uri=get_data_path(), region="cn")
     set_pkg_seed(1234, use_cuda=False)
     config = EasyDict(alpha_config)
     config.data_handler.type = 'alpha' + alpha
@@ -181,7 +181,7 @@ def test_ding_trading_alpha158_csi500(alpha):
     while True:
         action = np.random.random(size=action_dim)
         timestep = env.step(action)
-        assert timestep.obs.shape[0] == 500 * int(alpha)
+        assert timestep.obs.shape[0] == 3 * int(alpha)
         final_eval_reward += timestep.reward
         #print("{}(dtype: {})".format(timestep.reward, timestep.reward.dtype))
         if timestep.done:

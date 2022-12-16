@@ -251,6 +251,7 @@ class NoOptimizer(PortfolioOptimizer):
     """
     Use action as weight directly.
     """
+
     def __init__(self) -> None:
         super().__init__()
 
@@ -411,7 +412,8 @@ class TradingPolicy:
                     ) / factor
                     volume = hold + part_volume
                 portfolio.cash -= open_price * (1 + self._slippage / 2) * (volume - hold) * (1 + self._commission)
-                portfolio.positions.loc[code] = volume
+                if volume > 0:
+                    portfolio.positions.loc[code] = volume
             else:
                 logging.warning("Stock {} {} is not available to buy.".format(code, date))
         return portfolio
@@ -480,6 +482,12 @@ class TradingRecorder:
         self.reset()
 
     def record(self, date: pd.Timestamp, action: pd.Series, portfolio: Portfolio) -> None:
+        """
+        Arguments:
+            - date: date to take step
+            - action: action before take step
+            - portfolio: portfolio after take step
+        """
         self._records["date"].append(date)
         self._records["action"].append(action)
         self._records["cash"].append(portfolio.cash)
@@ -520,9 +528,9 @@ class TradingRecorder:
         position = pd.concat(self._records["position"], axis=1, keys=date).transpose()
 
         # Nav dataframe
-        nav = pd.DataFrame(self._records["nav"], index=date, columns=["nav"])
+        nav = pd.Series(self._records["nav"], index=date)
         # Cash dataframe
-        cash = pd.DataFrame(self._records["cash"], index=date, columns=["cash"])
+        cash = pd.Series(self._records["cash"], index=date)
 
         # Join together
         data = {"date": date, "action": action, "position": position, "nav": nav, "cash": cash}
@@ -608,6 +616,7 @@ class TradingEnv(gym.Env):
         if self._recorder:
             self._recorder.dump()
             self._recorder.reset()
+            self._recorder.record(self._today, pd.Series(), self._portfolio)
         obs = self._ds.query_obs(self._today)
         self._obs_index = obs.index.tolist()
         return obs

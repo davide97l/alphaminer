@@ -52,8 +52,6 @@ def get_env_config(args, market, start_time, end_time, env_cls=DingTradingEnv):
             start_time=start_time,
             end_time=end_time,
         ),
-        portfolio_optimizer=("no", {
-        }),
         action_softmax=args.softmax,
     )
     env_config = EasyDict(env_config)
@@ -202,7 +200,7 @@ if __name__ == '__main__':
     parser.add_argument('--eval-end-time', type=str, default='2018-12-31')
     parser.add_argument('-ss', '--sample-size', type=int, default=None)
     parser.add_argument('-sl', '--slippage', type=float, default=0.00246)
-    parser.add_argument('-nc', '--no-cost', action='store_false')
+    parser.add_argument('-nc', '--no-cost', action='store_true')
     parser.add_argument('-sm', '--softmax', action='store_true')
     parser.add_argument('--exp-name', type=str, default=None)
     parser.add_argument('--data-path', type=str, default=None)

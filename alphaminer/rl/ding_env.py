@@ -119,23 +119,22 @@ class DingTradingEnv(BaseEnv):
             elif dh_type == 'alpha360':
                 dh = Alpha360(**dh_config)
             elif dh_type == 'guotai':
-                ds = GTJADataSource(start_date=self._cfg.start_date,
-                                    end_date=self._cfg.end_date,
-                                    data_dir=self._cfg.data_path)
+                ds = GTJADataSource(
+                    start_date=self._cfg.start_date, end_date=self._cfg.end_date, data_dir=self._cfg.data_path
+                )
             else:
                 dh = AlphaMinerHandler(**dh_config)
         else:
             dh = AlphaMinerHandler(**self._cfg.data_handler)
         if not ds:
-            ds = DataSource(start_date=self._cfg.start_date,
-                            end_date=self._cfg.end_date,
-                            market=self._cfg.market,
-                            data_handler=dh)
+            ds = DataSource(
+                start_date=self._cfg.start_date, end_date=self._cfg.end_date, market=self._cfg.market, data_handler=dh
+            )
         po = self._cfg.get("portfolio_optimizer")
         if po is not None:
             po_type, po_kwargs = po
             assert po_type in PORTFOLIO_OPTIMISERS, "Portfolio optimizer {} do not exist!".format(po_type)
-            if po_type == "Topk" and self._cfg.strategy.get("buy_top_n"):  # For compatibility with old parameters
+            if po_type == "topk" and self._cfg.strategy.get("buy_top_n"):  # For compatibility with old parameters
                 po_kwargs["topk"] = int(self._cfg.strategy.get("buy_top_n"))
             po = PORTFOLIO_OPTIMISERS[po_type](**po_kwargs)
         tp = TradingPolicy(data_source=ds, **self._cfg.strategy, portfolio_optimizer=po)

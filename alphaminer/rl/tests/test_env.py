@@ -209,7 +209,7 @@ def test_stable_stock_index():
         else:
             return ['sh600008', 'sh600021']
 
-    with patch.object(D, 'list_instruments', mock_list_instruments) as mock_method:
+    with patch.object(D, 'list_instruments', mock_list_instruments):
         ds = DataSource(
             start_date=start_date,
             end_date=end_date,
@@ -264,3 +264,33 @@ def test_portfolio_optimizer():
     topk = TopkOptimizer(10, equal_weight=False)
     weight = topk.get_weight(action=action)
     assert round(weight.sum(), 6) == 1
+
+
+def test_paused_stock():
+    start_date = pd.to_datetime("2021-08-30")
+    end_date = pd.to_datetime("2021-09-03")
+
+    def mock_list_instruments(instruments, start_time, end_time, as_list):
+        return ['sh600006', 'sh600068']
+
+    with patch.object(D, 'list_instruments', mock_list_instruments):
+        ds = DataSource(
+            start_date=start_date,
+            end_date=end_date,
+            market="csi500",
+            data_handler=SimpleDataHandler(['sh600006', 'sh600068'], start_time=start_date, end_time=end_date)
+        )
+    tp = TradingPolicy(data_source=ds)
+    recorder = TradingRecorder(data_source=ds)
+    env = TradingEnv(data_source=ds, trading_policy=tp, max_episode_steps=-1, recorder=recorder)
+    # Reset
+    obs = env.reset()
+    done = False
+    while not done:
+        action = pd.Series(1, index=['sh600006', 'sh600068'])
+        obs, _, done, _ = env.step(action)
+    replay = recorder.records
+    # Paused stocks should still in position
+    # NAV need to include the value of the last day of delisted stocks
+    assert replay["nav"].iloc[-1] > 1e6
+    assert replay["position"]["sh600068"].iloc[-1] > 0
