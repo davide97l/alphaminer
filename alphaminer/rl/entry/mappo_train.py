@@ -2,9 +2,10 @@ import os
 import qlib
 import argparse
 import logging
+import numpy as np
+from collections import deque
 from tensorboardX import SummaryWriter
 from easydict import EasyDict
-from torch.nn.parallel import DataParallel
 
 from ding.envs import SyncSubprocessEnvManager, BaseEnvManager
 from ding.policy import PPOPolicy
@@ -12,6 +13,7 @@ from ding.policy import PPOPolicy
 from ding.utils import deep_merge_dicts, set_pkg_seed
 from alphaminer.rl.ding_env import DingTradingEnv, DingMATradingEnv
 from alphaminer.rl.model.mappo import MAVACv1, MAVACv2
+from alphaminer.rl.model.utils import DingDataParallel
 from alphaminer.rl.entry.utils import default_exp_name
 from ding.worker import InteractionSerialEvaluator, BaseLearner, EpisodeSerialCollector, SampleSerialCollector, NaiveReplayBuffer
 
@@ -46,19 +48,21 @@ def get_env_config(args, market, start_time, end_time, env_cls=DingTradingEnv):
             commission=0 if args.no_cost else 0.0003,
             stamp_duty=0 if args.no_cost else 0.001,
         ),
+        portfolio_optimizer=args.portfolio_optimizer,
         data_handler=dict(
             type=None,
             instruments=market,
             start_time=start_time,
             end_time=end_time,
         ),
-        action_softmax=args.softmax,
+        action_norm=args.action_norm,
     )
     env_config = EasyDict(env_config)
     env_config.data_handler.type = {
         'basic': None,
         '158': 'alpha158',
         '360': 'alpha360',
+        '518': 'alpha518',
         'guotai': 'guotai',
     }[args.env_type]
 
@@ -87,12 +91,14 @@ def get_policy_config(args, policy_cls, collector_cls, evaluator_cls, learner_cl
                 'basic': 6,
                 '158': 158,
                 '360': 360,
+                '518': 518,
                 'guotai': 10,
             }[args.env_type],
             global_obs_shape={
                 'basic': 6 * (500 if not sample_size else sample_size),
                 '158': 158 * (500 if not sample_size else sample_size),
                 '360': 360 * (500 if not sample_size else sample_size),
+                '518': 518 * (500 if not sample_size else sample_size),
                 'guotai': 10 * (50 if not sample_size else sample_size),
             }[args.env_type],
             action_shape=1,
@@ -100,6 +106,7 @@ def get_policy_config(args, policy_cls, collector_cls, evaluator_cls, learner_cl
                 'basic': 500 if not sample_size else sample_size,
                 '158': 500 if not sample_size else sample_size,
                 '360': 500 if not sample_size else sample_size,
+                '518': 500 if not sample_size else sample_size,
                 'guotai': 50 if not sample_size else sample_size,
             }[args.env_type],
         )
@@ -131,9 +138,8 @@ def main(cfg, args):
     policy_cfg.eval.evaluator.n_episode = cfg.env.n_evaluator_episode
     policy_cfg.eval.evaluator.stop_value = cfg.env.stop_value
     model = MAVACv2(**policy_cfg.model)
+    #_model = DingDataParallel(model)
     policy = PPOPolicy(policy_cfg, model=model)
-    policy._model = DataParallel(policy._model)
-    policy._learn_model._model = policy._model
 
     # args.max_episode_steps = -1
     # args.env_type = '158'
@@ -166,9 +172,21 @@ def main(cfg, args):
 
     learner.call_hook('before_run')
 
+    reward_buffer = deque(maxlen=20)
+    prev_best = -1e8
+
     while True:
         if evaluator.should_eval(learner.train_iter):
             stop, reward = evaluator.eval(learner.save_checkpoint, learner.train_iter, collector.envstep)
+            if 'eval_episode_return' in reward[0]:
+                reward_value = np.average([r['eval_episode_return'].numpy()[0] for r in reward])
+            else:
+                reward_value = np.average([r['final_eval_reward'].numpy()[0] for r in reward])
+            reward_buffer.append(reward_value)
+            avg_reward = np.average(reward_buffer)
+            if avg_reward > prev_best:
+                learner.save_checkpoint('avg_best_at_{}.pth.tar'.format(learner.train_iter))
+                prev_best = avg_reward
             if stop:
                 break
         new_data = collector.collect(train_iter=learner.train_iter)
@@ -181,7 +199,7 @@ def main(cfg, args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='trading rl train')
-    parser.add_argument('-e', '--env-type', choices=['basic', '158', '360', 'guotai'], default='basic')
+    parser.add_argument('-e', '--env-type', choices=['basic', '158', '360', '518', 'guotai'], default='basic')
     parser.add_argument(
         '-t',
         '--top-n',
@@ -201,9 +219,12 @@ if __name__ == '__main__':
     parser.add_argument('-ss', '--sample-size', type=int, default=None)
     parser.add_argument('-sl', '--slippage', type=float, default=0.00246)
     parser.add_argument('-nc', '--no-cost', action='store_true')
-    parser.add_argument('-sm', '--softmax', action='store_true')
+    parser.add_argument(
+        '-an', '--action_norm', choices=['softmax', 'cut_softmax', 'uniform', 'gumbel_softmax', None], default=None
+    )
     parser.add_argument('--exp-name', type=str, default=None)
     parser.add_argument('--data-path', type=str, default=None)
+    parser.add_argument('-po', '--portfolio-optimizer', type=str, default="topk")
     args = parser.parse_args()
     if args.exp_name is None:
         args.exp_name = default_exp_name('mappo', args)

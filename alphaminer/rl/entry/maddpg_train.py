@@ -2,15 +2,18 @@ import os
 import qlib
 import argparse
 import logging
+import numpy as np
+from collections import deque
 from tensorboardX import SummaryWriter
 from easydict import EasyDict
-from torch.nn.parallel import DataParallel
 
 from ding.envs import SyncSubprocessEnvManager, BaseEnvManager
 from ding.policy import DDPGPolicy
 from ding.utils import deep_merge_dicts, set_pkg_seed
 from alphaminer.rl.ding_env import DingTradingEnv, DingMATradingEnv
 from alphaminer.rl.model.maddpg import MAQACv1, MAQACv2
+from alphaminer.rl.model.utils import DingDataParallel
+from alphaminer.rl.entry.utils import default_exp_name
 from ding.worker import InteractionSerialEvaluator, BaseLearner, SampleSerialCollector, NaiveReplayBuffer
 
 market = 'csi500'
@@ -35,20 +38,23 @@ def get_env_config(args, market, start_time, end_time, env_cls=DingTradingEnv):
         market=market,
         start_date=start_time,
         end_date=end_time,
-        random_sample=(args.env_type == 'sample'),
-        strategy=dict(buy_top_n=args.top_n, ),
+        random_sample=args.sample_size,
+        strategy=dict(
+            buy_top_n=args.top_n,
+            slippage=args.slippage,
+        ),
         data_handler=dict(
             type=None,
-            market=market,
+            instruments=market,
             start_time=start_time,
             end_time=end_time,
         ),
+        action_norm=args.action_norm,
     )
     env_config = EasyDict(env_config)
     env_config.data_handler.type = {
         'basic': None,
         '158': 'alpha158',
-        'sample': 'alpha158',
     }[args.env_type]
 
     env_config = deep_merge_dicts(env_cls.default_config(), env_config)
@@ -56,6 +62,7 @@ def get_env_config(args, market, start_time, end_time, env_cls=DingTradingEnv):
 
 
 def get_policy_config(args, policy_cls, collector_cls, evaluator_cls, learner_cls, buffer_cls=None):
+    sample_size = args.sample_size
     ddpg_config = dict(
         cuda=True,
         action_space='continuous',
@@ -82,18 +89,15 @@ def get_policy_config(args, policy_cls, collector_cls, evaluator_cls, learner_cl
             agent_obs_shape={
                 'basic': 6,
                 '158': 158,
-                'sample': 158,
             }[args.env_type],
             global_obs_shape={
-                'basic': 500 * 6,
-                '158': 500 * 158,
-                'sample': 50 * 158,
+                'basic': 6 * (500 if not sample_size else sample_size),
+                '158': 158 * (500 if not sample_size else sample_size),
             }[args.env_type],
             action_shape=1,
             agent_num={
-                'basic': 500,
-                '158': 500,
-                'sample': 50,
+                'basic': 500 if not sample_size else sample_size,
+                '158': 500 if not sample_size else sample_size,
             }[args.env_type],
         )
     )
@@ -124,11 +128,9 @@ def main(cfg, args):
     )
     policy_cfg.eval.evaluator.n_episode = cfg.env.n_evaluator_episode
     policy_cfg.eval.evaluator.stop_value = cfg.env.stop_value
-    model = MAQACv1(**policy_cfg.model)
+    model = MAQACv2(**policy_cfg.model)
+    #_model = DingDataParallel(model)
     policy = DDPGPolicy(policy_cfg, model=model)
-    policy._model = DataParallel(policy._model)
-    policy._learn_model._model = policy._model
-    policy._target_model._model = policy._model
 
     # args.max_episode_steps = -1
     # args.env_type = '158'
@@ -163,9 +165,21 @@ def main(cfg, args):
 
     learner.call_hook('before_run')
 
+    reward_buffer = deque(maxlen=20)
+    prev_best = -1e8
+
     while True:
         if evaluator.should_eval(learner.train_iter):
             stop, reward = evaluator.eval(learner.save_checkpoint, learner.train_iter, collector.envstep)
+            if 'eval_episode_return' in reward[0]:
+                reward_value = np.average([r['eval_episode_return'].numpy()[0] for r in reward])
+            else:
+                reward_value = np.average([r['final_eval_reward'].numpy()[0] for r in reward])
+            reward_buffer.append(reward_value)
+            avg_reward = np.average(reward_buffer)
+            if avg_reward > prev_best:
+                learner.save_checkpoint('avg_best_at_{}.pth.tar'.format(learner.train_iter))
+                prev_best = avg_reward
             if stop:
                 break
         new_data = collector.collect(train_iter=learner.train_iter)
@@ -191,7 +205,7 @@ def main(cfg, args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='trading rl train')
-    parser.add_argument('-e', '--env-type', choices=['basic', '158', 'sample'], default='basic')
+    parser.add_argument('-e', '--env-type', choices=['basic', '158', 'guotai'], default='basic')
     parser.add_argument(
         '-t',
         '--top-n',
@@ -204,6 +218,17 @@ if __name__ == '__main__':
     parser.add_argument('-s', '--seed', type=int, default=0)
     parser.add_argument('-bs', '--batch-size', type=int, default=64)
     parser.add_argument('-lr', '--learning-rate', type=float, default=3e-4)
+    parser.add_argument('--train-start-time', type=str, default='2010-01-01')
+    parser.add_argument('--train-end-time', type=str, default='2016-12-31')
+    parser.add_argument('--eval-start-time', type=str, default='2017-01-01')
+    parser.add_argument('--eval-end-time', type=str, default='2017-12-31')
+    parser.add_argument('-ss', '--sample-size', type=int, default=None)
+    parser.add_argument('-sl', '--slippage', type=float, default=0.00246)
+    parser.add_argument('-nc', '--no-cost', action='store_true')
+    parser.add_argument('-an', '--action_norm', choices=['softmax', 'cut_softmax', 'uniform', 'gumbel_softmax', None], default=None)
     parser.add_argument('--exp-name', type=str, default=None)
+    parser.add_argument('--data-path', type=str, default=None)
     args = parser.parse_args()
+    if args.exp_name is None:
+        args.exp_name = default_exp_name('maddpg', args)
     main(main_config, args)

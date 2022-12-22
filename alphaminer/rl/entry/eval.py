@@ -105,7 +105,7 @@ def main(cfg, args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='trading rl backtesting')
     parser.add_argument('-p', '--policy', choices=['ppo', 'ddpg'], default='ppo')
-    parser.add_argument('-e', '--env-type', choices=['basic', '158', '360', 'guotai'], default='158')
+    parser.add_argument('-e', '--env-type', choices=['basic', '158', '360', '518', 'guotai'], default='158')
     parser.add_argument('-a', '--action-type', choices=['single', 'multi'], default='multi')
     parser.add_argument(
         '-t',
@@ -125,6 +125,7 @@ if __name__ == '__main__':
     parser.add_argument('-nc', '--no-cost', action='store_true')
     parser.add_argument('--data-path', type=str, default=None)
     parser.add_argument('-sm', '--softmax', action='store_true')
+    parser.add_argument('-po', '--portfolio-optimizer', type=str, default="topk")
     args = parser.parse_args()
     args.max_episode_steps = 0  # eval on the whole eval data
     if args.exp_name is None:

@@ -11,6 +11,7 @@ from ding.utils import ENV_REGISTRY
 
 from alphaminer.rl.env import TradingEnv, TradingPolicy, DataSource, TradingRecorder, RandomSampleEnv, PORTFOLIO_OPTIMISERS
 from alphaminer.data.handler import AlphaMinerHandler
+from alphaminer.data.alpha518_handler import Alpha518
 from qlib.contrib.data.handler import Alpha158, Alpha360
 from alphaminer.rl.gtja_env import GTJADataSource
 
@@ -40,10 +41,7 @@ class DingTradingEnv(BaseEnv):
         market='csi500',
         exp_name=None,
         strategy=dict(buy_top_n=10, ),
-        portfolio_optimizer=("topk", {
-            "topk": 10,
-            "equal_weight": True
-        }),
+        portfolio_optimizer="topk",
         random_sample=False,
         data_handler=dict(
             start_time="2010-01-01",
@@ -100,13 +98,8 @@ class DingTradingEnv(BaseEnv):
         return BaseEnvTimestep(obs.flatten(), rew, done, info)
 
     def action_to_series(self, action):
-
-        def softmax(x):
-            e_x = np.exp(x - np.max(x))
-            return e_x / e_x.sum()
-
-        if 'action_softmax' in self._cfg.keys() and self._cfg.action_softmax:
-            action = softmax(action)
+        if 'action_norm' in self._cfg.keys():
+            action = norm_action(action, self._cfg.action_norm)
         return pd.Series(action, index=self.obs_df.index)  # need the original df obs to perform action
 
     def _make_env(self):
@@ -118,6 +111,8 @@ class DingTradingEnv(BaseEnv):
                 dh = Alpha158(**dh_config)
             elif dh_type == 'alpha360':
                 dh = Alpha360(**dh_config)
+            elif dh_type == 'alpha518':
+                dh = Alpha518(**dh_config)
             elif dh_type == 'guotai':
                 ds = GTJADataSource(
                     start_date=self._cfg.start_date, end_date=self._cfg.end_date, data_dir=self._cfg.data_path
@@ -130,10 +125,11 @@ class DingTradingEnv(BaseEnv):
             ds = DataSource(
                 start_date=self._cfg.start_date, end_date=self._cfg.end_date, market=self._cfg.market, data_handler=dh
             )
-        po = self._cfg.get("portfolio_optimizer")
-        if po is not None:
-            po_type, po_kwargs = po
+        po = None
+        po_type = self._cfg.get("portfolio_optimizer")
+        if po_type is not None:
             assert po_type in PORTFOLIO_OPTIMISERS, "Portfolio optimizer {} do not exist!".format(po_type)
+            po_kwargs = {}
             if po_type == "topk" and self._cfg.strategy.get("buy_top_n"):  # For compatibility with old parameters
                 po_kwargs["topk"] = int(self._cfg.strategy.get("buy_top_n"))
             po = PORTFOLIO_OPTIMISERS[po_type](**po_kwargs)
@@ -232,3 +228,35 @@ class DingMATradingEnv(DingTradingEnv):
         }
         rew = to_ndarray([rew]).astype(np.float32)
         return BaseEnvTimestep(obs, rew, done, info)
+
+
+def norm_action(action, norm_type=None):
+
+    def _softmax(x):
+        e_x = np.exp(x - np.max(x))
+        return e_x / e_x.sum()
+
+    def _top_k(x, k):
+        return np.argpartition(x, k)[-k:]
+
+    def _cut_softmax(x, k=5):
+        indexs = _top_k(x, k)
+        x[indexs] = np.min(x[indexs])
+        return _softmax(x)
+
+    def _gumbel_softmax(x):
+        u = np.random.uniform(size=np.shape(x))
+        z = -np.log(-np.log(u))
+        return _softmax(z)
+
+    if norm_type == 'uniform':
+        action = action / max(action)
+        action = action - min(action)
+        action = action / (sum(action) + 1e-6)
+    elif norm_type == 'softmax':
+        action = _softmax(action)
+    elif norm_type == "cut_softmax":
+        action = _cut_softmax(action)
+    elif norm_type == "gumbel_softmax":
+        action = _gumbel_softmax(action)
+    return action

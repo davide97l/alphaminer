@@ -2,14 +2,46 @@ from typing import Union, Dict, Optional
 from torch.nn.parallel import DataParallel
 import torch
 import torch.nn as nn
+from itertools import chain
 
 from ding.torch_utils import MLP
 
 
-class DingDataParrallel(DataParallel):
+class DingDataParallel(DataParallel):
 
-    def __getattr__(self, key: str):
-        return getattr(self.module, key)
+    def __getattr__(self, name: str):
+        try:
+            return super().__getattr__(name)
+        except AttributeError:
+            return self.module.__getattr__(name)
+    
+    def forward(self, *inputs, **kwargs):
+        if not self.device_ids:
+            return self.module(*inputs, **kwargs)
+        if len(self.device_ids) == 1:
+            return self.module(*inputs[0], **kwargs[0])
+
+        for t in chain(self.module.parameters(), self.module.buffers()):
+            if t.device != self.src_device_obj:
+                raise RuntimeError("module must have its parameters and buffers "
+                                   "on device {} (device_ids[0]) but found one of "
+                                   "them on device: {}".format(self.src_device_obj, t.device))
+
+        max_device_num = min(self._get_input_size(inputs), len(self.device_ids))
+        inputs, kwargs = self.scatter(inputs, kwargs, self.device_ids[:max_device_num])
+        if max_device_num == 1:
+            return self.module(*inputs[0], **kwargs[0])
+        replicas = self.replicate(self.module, self.device_ids[:len(inputs)])
+        outputs = self.parallel_apply(replicas, inputs, kwargs)
+        return self.gather(outputs, self.output_device)
+    
+    def _get_input_size(self, inputs):
+        if isinstance(inputs, dict):
+            return self._get_input_size(inputs[list(inputs.keys())[0]])
+        elif isinstance(inputs, tuple):
+            return self._get_input_size(inputs[0])
+        elif isinstance(inputs, torch.Tensor):
+            return inputs.shape[0]
 
 
 class ReducedRegressionHead(nn.Module):

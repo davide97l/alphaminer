@@ -166,8 +166,8 @@ def test_ding_trading_qlib_csi500():
             break
 
 
-@pytest.mark.parametrize("alpha", ['158', '360'])
-def test_ding_trading_alpha158_csi500(alpha):
+@pytest.mark.parametrize("alpha", ['518', '158', '360'])
+def test_ding_trading_alpha_csi500(alpha):
     qlib.init(provider_uri=get_data_path(), region="cn")
     set_pkg_seed(1234, use_cuda=False)
     config = EasyDict(alpha_config)

@@ -247,7 +247,7 @@ class TopkOptimizer(PortfolioOptimizer):
             return action
 
 
-class NoOptimizer(PortfolioOptimizer):
+class WeightedOptimizer(PortfolioOptimizer):
     """
     Use action as weight directly.
     """
@@ -256,10 +256,10 @@ class NoOptimizer(PortfolioOptimizer):
         super().__init__()
 
     def get_weight(self, action: pd.Series) -> pd.Series:
-        return action
+        return action / action.sum()
 
 
-PORTFOLIO_OPTIMISERS = {"topk": TopkOptimizer, "no": NoOptimizer}
+PORTFOLIO_OPTIMISERS = {"topk": TopkOptimizer, "weighted": WeightedOptimizer}
 
 
 class TradingPolicy:
