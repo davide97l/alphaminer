@@ -115,33 +115,34 @@ class Alpha518(DataHandlerLP):
         # If further normalization are executed (e.g. centralization),  CLOSE0 and VOLUME0 will be 0.
         fields = []
         names = []
+        windows = 60
 
-        for i in range(59, 0, -1):
+        for i in range(windows-1, 0, -1):
             fields += ["Ref($close, %d)/$close" % (i)]
             names += ["CLOSE%d" % (i)]
         fields += ["$close/$close"]
         names += ["CLOSE0"]
-        for i in range(59, 0, -1):
+        for i in range(windows-1, 0, -1):
             fields += ["Ref($open, %d)/$close" % (i)]
             names += ["OPEN%d" % (i)]
         fields += ["$open/$close"]
         names += ["OPEN0"]
-        for i in range(59, 0, -1):
+        for i in range(windows-1, 0, -1):
             fields += ["Ref($high, %d)/$close" % (i)]
             names += ["HIGH%d" % (i)]
         fields += ["$high/$close"]
         names += ["HIGH0"]
-        for i in range(59, 0, -1):
+        for i in range(windows-1, 0, -1):
             fields += ["Ref($low, %d)/$close" % (i)]
             names += ["LOW%d" % (i)]
         fields += ["$low/$close"]
         names += ["LOW0"]
-        for i in range(59, 0, -1):
+        for i in range(windows-1, 0, -1):
             fields += ["Ref($vwap, %d)/$close" % (i)]
             names += ["VWAP%d" % (i)]
         fields += ["$vwap/$close"]
         names += ["VWAP0"]
-        for i in range(59, 0, -1):
+        for i in range(windows-1, 0, -1):
             fields += ["Ref($volume, %d)/($volume+1e-12)" % (i)]
             names += ["VOLUME%d" % (i)]
         fields += ["$volume/($volume+1e-12)"]

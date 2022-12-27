@@ -214,7 +214,7 @@ if __name__ == '__main__':
     parser.add_argument('-lr', '--learning-rate', type=float, default=3e-4)
     parser.add_argument('--train-start-time', type=str, default='2010-01-01')
     parser.add_argument('--train-end-time', type=str, default='2016-12-31')
-    parser.add_argument('--eval-start-time', type=str, default='2017-01-01')
+    parser.add_argument('--eval-start-time', type=str, default='2017-07-01')
     parser.add_argument('--eval-end-time', type=str, default='2018-12-31')
     parser.add_argument('-ss', '--sample-size', type=int, default=None)
     parser.add_argument('-sl', '--slippage', type=float, default=0.00246)

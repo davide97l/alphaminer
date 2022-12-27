@@ -47,7 +47,7 @@ class DataSource:
         # Reindex and fill missing values with 0
         miss_indexes = set(instruments) - set(df.index)
         for miss_ind in miss_indexes:
-            logging.warning("Code {} {} is missing in obs!".format(miss_ind, date))
+            logging.debug("Code {} {} is missing in obs!".format(miss_ind, date))
         df = df.reindex(instruments).fillna(0)
         return df
 
@@ -120,7 +120,7 @@ class DataSource:
         data = {}
         for date in df.index.get_level_values(1).unique():
             data[date] = df[df.index.get_level_values(1) == date].reset_index(level=1, drop=True)
-        logging.warning("Time cost: {:.4f}s | Init trading data Done".format(time() - start))
+        logging.info("Time cost: {:.4f}s | Init trading data Done".format(time() - start))
         self._trading_columns = data[list(data.keys())[0]].columns
         return data
 
@@ -207,7 +207,7 @@ class Portfolio:
 
         miss_codes = set(self.positions.index) - set(price.index)
         if len(miss_codes) > 0:
-            logging.warning("Codes {} are missing in price when calculating nav.".format(miss_codes))
+            logging.debug("Codes {} are missing in price when calculating nav.".format(miss_codes))
 
         nav = (self.positions * price).sum() + self.cash
         return nav
@@ -395,13 +395,13 @@ class TradingPolicy:
                 else:
                     portfolio.positions.loc[code] = volume
             else:
-                logging.warning("Stock {} {} is not available to sell.".format(code, date))
+                logging.debug("Stock {} {} is not available to sell.".format(code, date))
         else:  # Buy
             if self._available_to_buy(date, code):
                 need_cash = open_price * (1 + self._slippage / 2) * (volume -
                                                                      hold) * (1 + self._commission)  # type: ignore
                 if need_cash > portfolio.cash:
-                    logging.warning(
+                    logging.debug(
                         "Insufficient cash to buy stock {} {}, need {:.0f}, have {:.0f}".format(
                             code, date, need_cash, portfolio.cash
                         )
@@ -415,7 +415,7 @@ class TradingPolicy:
                 if volume > 0:
                     portfolio.positions.loc[code] = volume
             else:
-                logging.warning("Stock {} {} is not available to buy.".format(code, date))
+                logging.debug("Stock {} {} is not available to buy.".format(code, date))
         return portfolio
 
     def _available_to_buy(self, date: Union[str, pd.Timestamp], code: str) -> bool:
