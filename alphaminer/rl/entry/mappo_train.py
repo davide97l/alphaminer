@@ -12,7 +12,7 @@ from ding.policy import PPOPolicy
 
 from ding.utils import deep_merge_dicts, set_pkg_seed
 from alphaminer.rl.ding_env import DingTradingEnv, DingMATradingEnv
-from alphaminer.rl.model.mappo import MAVACv1, MAVACv2
+from alphaminer.rl.model.mappo_custom import MAVACv1, MAVACv2
 from alphaminer.rl.model.utils import DingDataParallel
 from alphaminer.rl.entry.utils import default_exp_name
 from ding.worker import InteractionSerialEvaluator, BaseLearner, EpisodeSerialCollector, SampleSerialCollector, NaiveReplayBuffer
