@@ -12,7 +12,7 @@ from ding.policy import PPOPolicy
 
 from ding.utils import deep_merge_dicts, set_pkg_seed
 from alphaminer.rl.ding_env import DingTradingEnv, DingMATradingEnv
-from alphaminer.rl.model.mappo_custom import MAVACv1, MAVACv2
+from alphaminer.rl.model.mappo import MAVACv1, MAVACv2
 from alphaminer.rl.model.utils import DingDataParallel
 from alphaminer.rl.entry.utils import default_exp_name
 from ding.worker import InteractionSerialEvaluator, BaseLearner, EpisodeSerialCollector, SampleSerialCollector, NaiveReplayBuffer
@@ -207,7 +207,7 @@ if __name__ == '__main__':
         default=20,
     )
     parser.add_argument('-ms', '--max-episode-steps', type=int, default=40)
-    parser.add_argument('-cn', '--collect-env-num', type=int, default=1)
+    parser.add_argument('-cn', '--collect-env-num', type=int, default=2)
     parser.add_argument('-en', '--evaluate-env-num', type=int, default=1)
     parser.add_argument('-s', '--seed', type=int, default=0)
     parser.add_argument('-bs', '--batch-size', type=int, default=64)
