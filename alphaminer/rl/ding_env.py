@@ -14,6 +14,7 @@ from alphaminer.data.handler import AlphaMinerHandler
 from alphaminer.data.alpha518_handler import Alpha518
 from qlib.contrib.data.handler import Alpha158, Alpha360
 from alphaminer.rl.gtja_env import GTJADataSource
+import random
 
 try:
     from ding.envs import EvalEpisodeReturnEnv
@@ -68,6 +69,9 @@ class DingTradingEnv(BaseEnv):
         self._reward_space = gym.spaces.Box(
             low=self._env.reward_range[0], high=self._env.reward_range[1], shape=(1, ), dtype=np.float32
         )
+        self.p_sticky_action = 0.
+        self.p_random_action = 0.
+        self.prev_action = None
 
     def reset(self) -> np.ndarray:
         if hasattr(self, '_seed') and hasattr(self, '_dynamic_seed') and self._dynamic_seed:
@@ -89,12 +93,17 @@ class DingTradingEnv(BaseEnv):
         np.random.seed(self._seed)
 
     def step(self, action: Union[np.ndarray, list]) -> BaseEnvTimestep:
-        action = to_ndarray(action).astype(np.float32)
-        action = self.action_to_series(action)
+        if self.prev_action is not None and random.random() <= self.p_sticky_action:
+            action = self.prev_action
+        elif random.random() <= self.p_random_action:
+            action = self.random_action()
+        else:
+            action = self.action_to_series(action)
         obs, rew, done, info = self._env.step(action)
         self.obs_df = obs  # keep a copy of the original df obs
         obs = to_ndarray(obs.values).astype(np.float32)
         rew = to_ndarray([rew]).astype(np.float32)
+        self.prev_action = action
         return BaseEnvTimestep(obs.flatten(), rew, done, info)
 
     def action_to_series(self, action):

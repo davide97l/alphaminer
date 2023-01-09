@@ -111,7 +111,7 @@ class MAVACv2(nn.Module):
         sigma_type: Optional[str] = 'independent',
         bound_type: Optional[str] = None,
         critic_input_size: Optional[int] = None,
-        dropout: float = 0.5
+        dropout: float = 0.
     ) -> None:
         super().__init__()
         agent_obs_shape: int = squeeze(agent_obs_shape)
