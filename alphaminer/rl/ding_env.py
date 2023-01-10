@@ -9,7 +9,7 @@ from ding.envs import BaseEnv, BaseEnvTimestep
 from ding.torch_utils import to_ndarray
 from ding.utils import ENV_REGISTRY
 
-from alphaminer.rl.env import TradingEnv, TradingPolicy, DataSource, TradingRecorder, RandomSampleEnv, PORTFOLIO_OPTIMISERS
+from alphaminer.rl.env import TradingEnv, TradingPolicy, DataSource, TradingRecorder, RandomSampleWrapper, PORTFOLIO_OPTIMISERS, WeeklyEnv
 from alphaminer.data.handler import AlphaMinerHandler
 from alphaminer.data.alpha518_handler import Alpha518
 from qlib.contrib.data.handler import Alpha158, Alpha360
@@ -54,14 +54,20 @@ class DingTradingEnv(BaseEnv):
         ),
         action_softmax=False,  # apply softmax to actions array
         data_path=None,
+        freq="daily",
+        done_reward="default",
+        p_sticky_action=0.,
+        p_random_action=0.,
+        action_feature=True,
     )
 
     def __init__(self, cfg: dict) -> None:
-        self._cfg = cfg
+        self._cfg = EasyDict({**self.config, **cfg})  # Deep merge default config and custom config
         self._replay_path = None  # replay not used in this env
         self.obs_df = None  # store the current observation as Dataframe
         self.use_recorder = 'recorder' in self._cfg.keys()
         self._random_sample = self._cfg.random_sample
+        self._freq = self._cfg.freq
         self._env = self._make_env()
         self._env.observation_space.dtype = np.float32  # To unify the format of envs in DI-engine
         self._observation_space = self._env.observation_space
@@ -69,9 +75,10 @@ class DingTradingEnv(BaseEnv):
         self._reward_space = gym.spaces.Box(
             low=self._env.reward_range[0], high=self._env.reward_range[1], shape=(1, ), dtype=np.float32
         )
-        self.p_sticky_action = 0.
-        self.p_random_action = 0.
+        self.p_sticky_action = self._cfg.p_sticky_action
+        self.p_random_action = self._cfg.p_random_action
         self.prev_action = None
+        self.action_feature = self._cfg.action_feature
 
     def reset(self) -> np.ndarray:
         if hasattr(self, '_seed') and hasattr(self, '_dynamic_seed') and self._dynamic_seed:
@@ -93,7 +100,9 @@ class DingTradingEnv(BaseEnv):
         np.random.seed(self._seed)
 
     def step(self, action: Union[np.ndarray, list]) -> BaseEnvTimestep:
-        if self.prev_action is not None and random.random() <= self.p_sticky_action:
+        if self.prev_action is None:
+            self.prev_action = self.action_to_series(np.zeros_like(action))
+        if random.random() <= self.p_sticky_action:
             action = self.prev_action
         elif random.random() <= self.p_random_action:
             action = self.random_action()
@@ -109,6 +118,10 @@ class DingTradingEnv(BaseEnv):
     def action_to_series(self, action):
         if 'action_norm' in self._cfg.keys():
             action = norm_action(action, self._cfg.action_norm)
+        action[action < 0] = 0
+        if sum(action) < 1e-6:
+            action[:] = 1
+        action = action / sum(action)
         return pd.Series(action, index=self.obs_df.index)  # need the original df obs to perform action
 
     def _make_env(self):
@@ -150,23 +163,27 @@ class DingTradingEnv(BaseEnv):
             recorder = TradingRecorder(
                 data_source=ds, dirname=self._cfg.recorder.path, filename=self._cfg.recorder.get("exp_name")
             )
-        if not self._random_sample:
+        if self._freq == "weekly":
+            env = WeeklyEnv(
+                data_source=ds,
+                trading_policy=tp,
+                max_episode_steps=self._cfg.max_episode_steps,
+                cash=self._cfg.cash,
+                recorder=recorder,
+                done_reward=self._cfg.done_reward,
+            )
+        else:
             env = TradingEnv(
                 data_source=ds,
                 trading_policy=tp,
                 max_episode_steps=self._cfg.max_episode_steps,
                 cash=self._cfg.cash,
-                recorder=recorder
+                recorder=recorder,
+                done_reward=self._cfg.done_reward,
             )
-        else:
-            env = RandomSampleEnv(
-                n_sample=self._random_sample,
-                data_source=ds,
-                trading_policy=tp,
-                max_episode_steps=self._cfg.max_episode_steps,
-                cash=self._cfg.cash,
-                recorder=recorder
-            )
+
+        if self._random_sample:
+            env = RandomSampleWrapper(env, n_sample=self._random_sample)
         env = final_env_cls(env)
         return env
 
@@ -215,38 +232,58 @@ class DingMATradingEnv(DingTradingEnv):
         raw_obs = self._env.reset()
         self.obs_df = raw_obs  # this is because action needs obs.index to be initialized, so we store the obs in df format
         agent_obs = to_ndarray(copy.deepcopy(raw_obs.values)).astype('float32')
+        if self.action_feature:
+            action_agent_obs = self.get_action_feature(agent_obs)
+        print(action_agent_obs.shape)
         action_mask = np.ones((500, 1))
         obs = {
             'global_state': agent_obs.flatten(),
-            'agent_state': agent_obs,
+            'agent_state': agent_obs if not self.action_feature else action_agent_obs,
             'action_mask': action_mask,
         }
         return obs
 
     def step(self, action: Union[np.ndarray, list]) -> BaseEnvTimestep:
         action = to_ndarray(action).astype(np.float32)
-        action = self.action_to_series(action)
+        if self.prev_action is None:
+            self.prev_action = self.action_to_series(np.zeros_like(action))
+        if random.random() <= self.p_sticky_action:
+            action = self.prev_action
+        elif random.random() <= self.p_random_action:
+            action = self.random_action()
+        else:
+            action = self.action_to_series(action)
         raw_obs, rew, done, info = self._env.step(action)
         self.obs_df = raw_obs  # keep a copy of the original df obs
         agent_obs = to_ndarray(copy.deepcopy(raw_obs.values)).astype('float32')
         action_mask = np.ones((500, 1))
+        if self.action_feature:
+            action_agent_obs = self.get_action_feature(agent_obs)
         obs = {
             'global_state': agent_obs.flatten(),
-            'agent_state': agent_obs,
+            'agent_state': agent_obs if not self.action_feature else action_agent_obs,
             'action_mask': action_mask,
         }
         rew = to_ndarray([rew]).astype(np.float32)
+        self.prev_action = action
         return BaseEnvTimestep(obs, rew, done, info)
+
+    def get_action_feature(self, agent_obs):
+        if self.prev_action is None:
+            self.prev_action = self.action_to_series(np.zeros_like(self.random_action().to_numpy()))
+        return np.concatenate((agent_obs, np.expand_dims(self.prev_action.to_numpy(), -1)), axis=-1)
 
 
 def norm_action(action, norm_type=None):
+
+    assert norm_type in {None, 'softmax', 'cut_softmax', 'gumbel_softmax', 'topk_softmax'}
 
     def _softmax(x):
         e_x = np.exp(x - np.max(x))
         return e_x / e_x.sum()
 
     def _top_k(x, k):
-        return np.argpartition(x, k)[-k:]
+        return np.argpartition(x, -k)[-k:]
 
     def _cut_softmax(x, k=5):
         indexs = _top_k(x, k)
@@ -258,14 +295,22 @@ def norm_action(action, norm_type=None):
         z = -np.log(-np.log(u))
         return _softmax(z)
 
-    if norm_type == 'uniform':
-        action = action / max(action)
-        action = action - min(action)
-        action = action / (sum(action) + 1e-6)
-    elif norm_type == 'softmax':
+    def _topk_softmax(x, k=10):
+        x = _softmax(x)
+        indexs = _top_k(x, k)
+        x[indexs] = 0
+        return x
+
+    if norm_type == 'softmax':
         action = _softmax(action)
+
     elif norm_type == "cut_softmax":
         action = _cut_softmax(action)
+
     elif norm_type == "gumbel_softmax":
         action = _gumbel_softmax(action)
+
+    elif norm_type == 'topk_softmax':
+        action = _topk_softmax(action)
+
     return action

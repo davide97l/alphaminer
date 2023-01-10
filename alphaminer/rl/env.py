@@ -276,12 +276,10 @@ class TradingPolicy:
             self,
             data_source: DataSource,
             buy_top_n: int = 50,
-            use_benchmark: bool = True,
             portfolio_optimizer: Optional[PortfolioOptimizer] = None,
             slippage: float = 0.00246,
             commission: float = 0.0003,
-            stamp_duty: float = 0.001,
-            benchmark_index: Optional[str] = None
+            stamp_duty: float = 0.001
     ) -> None:
         """
         Overview:
@@ -302,16 +300,11 @@ class TradingPolicy:
         self._stamp_duty = stamp_duty  # Charged only when sold.
         self._commission = commission  # Charged at both side.
         self._slippage = slippage
-        self._use_benchmark = use_benchmark  # Use excess income to calculate reward.
-        self._benchmark_index = benchmark_index
-        if benchmark_index is not None:
-            self._ds.load_benchmark_price(benchmark_index)
         if portfolio_optimizer is None:
             portfolio_optimizer = TopkOptimizer(self._buy_top_n, equal_weight=True)
         self._portfolio_optimizer = portfolio_optimizer
 
-    def take_step(self, date: Union[str, pd.Timestamp], action: pd.Series,
-                  portfolio: Portfolio) -> Tuple[Portfolio, float]:
+    def take_step(self, date: Union[str, pd.Timestamp], action: pd.Series, portfolio: Portfolio) -> Portfolio:
         """
         Overview:
             Take step, update portfolio and get reward (the change of nav).
@@ -325,10 +318,8 @@ class TradingPolicy:
             - portfolio, log_change: the newest portfolio and returns.
         """
         buy_stocks_weight = self._portfolio_optimizer.get_weight(action)
+        buy_stocks_weight = buy_stocks_weight[buy_stocks_weight > 0]
         buy_stocks = buy_stocks_weight.index.tolist()
-        prev_date = self._ds.prev_date(date)
-        prev_price = self._ds.query_trading_data(prev_date, portfolio.positions.index.tolist())["close"]
-        prev_nav = portfolio.nav(price=prev_price)  # type: ignore
 
         # Sell stocks
         for code in portfolio.positions.keys():
@@ -344,22 +335,7 @@ class TradingPolicy:
             for code, value in buy_value.items():
                 self.order_target_value(date, code, value, portfolio)  # type: ignore
 
-        # Calculate reward
-        future_price = self._ds.query_trading_data(date, portfolio.positions.index.tolist())["close"]
-        nav = portfolio.nav(price=future_price)  # type: ignore
-        log_change = np.log(nav / prev_nav)
-
-        if self._use_benchmark:
-            if self._benchmark_index is None:
-                # Use average log change of all the stocks in the universe
-                benchmark_change = self._ds.query_trading_data(date, action.index.tolist())["change"].dropna()
-                benchmark_change = benchmark_change.sum() / benchmark_change.shape[0]
-                benchmark_change = np.log(benchmark_change)
-            else:
-                benchmark = self._ds.query_benchmark(date=date)
-                benchmark_change = benchmark.loc["log_change"]
-            log_change -= benchmark_change
-        return portfolio, log_change
+        return portfolio
 
     def order_target_value(
             self, date: Union[str, pd.Timestamp], code: str, value: float, portfolio: Portfolio
@@ -575,35 +551,59 @@ class TradingEnv(gym.Env):
             trading_policy: TradingPolicy,
             max_episode_steps: int = 20,
             cash: float = 1000000,
-            recorder: Optional[TradingRecorder] = None
+            recorder: Optional[TradingRecorder] = None,
+            use_benchmark: bool = True,
+            benchmark_index: Optional[str] = None,
+            done_reward: str = "default",
     ) -> None:
         super().__init__()
-        self._ds = data_source
+        self.ds = data_source
+        self.date_steps = self._get_date_steps()
         if max_episode_steps == -1:
-            max_episode_steps = len(self._ds.dates) - 1
+            max_episode_steps = len(self.date_steps) - 1
         self.max_episode_steps = max_episode_steps
         assert len(
-            self._ds.dates
+            self.date_steps
         ) > max_episode_steps, "Max episode step ({}) should be less than effective trading days ({}).".format(
-            max_episode_steps, len(self._ds.dates)
+            max_episode_steps, len(self.date_steps)
         )
+        self._done_reward = done_reward
+        self._reward_history = []
         self._trading_policy = trading_policy
         self._cash = cash
-        self.observation_space = np.array(self._ds.query_obs(date=self._ds.dates[0]).values.shape)  # type: ignore
-        self.action_space = self.observation_space[0]  # number of instruments
+        obs, _ = self._query_obs(trading_date=self.date_steps[0])
+        self.observation_space = np.array(obs.values.shape)  # type: ignore
+        self.action_space: int = self.observation_space[0]  # number of instruments
         self.reward_range = (-np.inf, np.inf)
         self._recorder = recorder
-        self._obs_index: List[str] = []
+        self.obs_index: List[str] = []
+        self._use_benchmark = use_benchmark
+        self._benchmark_index = benchmark_index
+        if benchmark_index is not None:
+            self.ds.load_benchmark_price(benchmark_index)
         self._reset()
 
     def step(self, action: pd.Series) -> Tuple[pd.DataFrame, float, bool, Dict[Any, Any]]:
-        next_date = self._ds.next_date(self._today)
-        self._portfolio, reward = self._trading_policy.take_step(next_date, action=action, portfolio=self._portfolio)
-        obs = self._ds.query_obs(date=next_date)
+        # Trading date is next date after the last day of obs
+        trading_date = self.date_steps[self._step_idx + 1]
+        prev_reward_date = self.ds.prev_date(trading_date)
+        prev_nav = self._get_nav(prev_reward_date)
+        self._portfolio = self._trading_policy.take_step(trading_date, action=action, portfolio=self._portfolio)
+        # Reward date is the last date before next trading date, or the last date of current obs
+        obs, reward_date = self._query_obs(trading_date=trading_date)
         obs = self._reindex_obs(obs)
+        reward = self._get_reward(
+            prev_reward_date=prev_reward_date, reward_date=reward_date, prev_nav=prev_nav, action=action
+        )
+        self._reward_history.append(reward)
+
+        # Change date
         self._step += 1
+        self._step_idx += 1
+        self._today = self.date_steps[self._step_idx]  # Set today to trading date
         done = True if self._step >= self.max_episode_steps else False
-        self._today = next_date
+        if done and self._done_reward == "sharpe":
+            reward = self._get_sharpe_reward()
         if self._recorder:
             self._recorder.record(self._today, action, self._portfolio)
         return obs, reward, done, {}
@@ -617,17 +617,19 @@ class TradingEnv(gym.Env):
             self._recorder.dump()
             self._recorder.reset()
             self._recorder.record(self._today, pd.Series(), self._portfolio)
-        obs = self._ds.query_obs(self._today)
-        self._obs_index = obs.index.tolist()
+        obs, _ = self._query_obs(self._today)
+        self.obs_index = obs.index.tolist()
         return obs
 
     def _reset(self) -> None:
         """
         Reset states.
         """
-        self._today = np.random.choice(self._ds.dates[:-self.max_episode_steps])  # type: ignore
+        self._step_idx = np.random.choice(len(self.date_steps[:-self.max_episode_steps]))
+        self._today = self.date_steps[self._step_idx]
         self._step = 0
         self._portfolio = Portfolio(cash=self._cash)
+        self._reward_history = []
 
     def close(self) -> None:
         pass
@@ -637,7 +639,7 @@ class TradingEnv(gym.Env):
         Keep the original order of stocks when an index changes it's constituent stocks.
         """
         new = obs.index.tolist()
-        old = self._obs_index
+        old = self.obs_index
         swap_in = set(new) - set(old)
         swap_out = set(old) - set(new)
         index = []
@@ -650,27 +652,144 @@ class TradingEnv(gym.Env):
                 index.append(code)
             else:
                 index.append(swap_in.pop())
-        self._obs_index = index
+        self.obs_index = index
         return obs.reindex(index)
 
+    def _get_nav(self, date: pd.Timestamp) -> float:
+        portfolio = self._portfolio
+        price = self.ds.query_trading_data(date, portfolio.positions.index.tolist())["close"]
+        nav = portfolio.nav(price=price)
+        return nav
 
-class RandomSampleEnv(TradingEnv):
-    """
-    Only randomly sample a subset from the stock pool as a observation space for training.
-    """
+    def _get_reward(
+            self, prev_reward_date: pd.Timestamp, reward_date: pd.Timestamp, prev_nav: float, action: pd.Series
+    ) -> float:
+        """
+        Overview:
+            Reward is calculated after take step, so the current date should be the trading date.
+            Nav will be calculated by the close price of the day before current trading date (prev_reward_date)
+            divide the close price of the day before the next trading date (reward_date).
+        """
+        # Calculate reward
+        nav = self._get_nav(reward_date)
+        log_change = np.log(nav / prev_nav)
 
-    def __init__(self, *args, n_sample: int = 50, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
+        if self._use_benchmark:
+            if self._benchmark_index is None:
+                # Use average log change of all the stocks in the universe
+                prev_close = self.ds.query_trading_data(prev_reward_date, action.index.tolist())["close"]
+                current_close = self.ds.query_trading_data(reward_date, action.index.tolist())["close"]
+                benchmark_change = (current_close / prev_close).dropna()
+                benchmark_change = benchmark_change.sum() / benchmark_change.shape[0]
+                benchmark_change = np.log(benchmark_change)
+            else:
+                prev_close = self.ds.query_benchmark(date=prev_reward_date).loc["close"]
+                current_close = self.ds.query_benchmark(date=reward_date).loc["close"]
+                benchmark_change = np.log(current_close / prev_close)
+            log_change -= benchmark_change
+        return log_change
+
+    def _get_sharpe_reward(self) -> float:
+        """
+        Overview:
+            Calculate the sharpe ratio of reward history.
+        """
+        if len(self._reward_history) < 2:
+            return 0
+        return np.mean(self._reward_history) / np.std(self._reward_history)
+
+    def _get_date_steps(self) -> List[pd.Timestamp]:
+        """
+        Overview:
+            Get date of each step.
+        """
+        return self.ds.dates
+
+    def _query_obs(self, trading_date: pd.Timestamp) -> Tuple[pd.DataFrame, pd.Timestamp]:
+        """
+        Overview:
+            Get obs of each step.
+        """
+        return self.ds.query_obs(date=trading_date), trading_date
+
+
+class RandomSampleWrapper(gym.Wrapper):
+
+    def __init__(self, env: TradingEnv, n_sample: int = 50, new_step_api: bool = False):
+        """
+        Only randomly sample a subset from the stock pool as a observation space for training.
+        """
+        super().__init__(env, new_step_api)
         self._n_sample = n_sample
-        self.observation_space[0] = n_sample  # type: ignore
-        self.action_space = n_sample
+        self.env = env
+        self.env.observation_space[0] = n_sample  # type: ignore
+        self.env.action_space = n_sample
 
     def reset(self) -> pd.DataFrame:
         """
         Reset states and return the reset obs.
         """
-        obs = super().reset()
-        self._obs_index_mask = np.random.choice(range(len(self._obs_index)), size=self._n_sample, replace=False)
-        self._obs_index = [self._obs_index[i] for i in self._obs_index_mask]
-        obs = obs.loc[self._obs_index]
+        obs = self.env.reset()
+        obs_index_mask = np.random.choice(range(len(self.env.obs_index)), size=self._n_sample, replace=False)
+        self.env.obs_index = [self.env.obs_index[i] for i in obs_index_mask]
+        obs = obs.loc[self.env.obs_index]
         return obs
+
+
+class WeeklyEnv(TradingEnv):
+
+    def __init__(self, *args, weekday: int = 1, **kwargs) -> None:
+        """
+        Overview:
+            Sample data in weeks.
+        Arguments:
+            - weekday: The nth trading day of the week (1-5). If weekday is 1, it means Monday most of the time.
+                But if the market is closed on Monday, the first trading day after the market opening will be selected.
+                If weekday exceeds the number of trading days in the week, use the last day as the trading date.
+                The obs is a fixed five-day period before the trading day.
+        """
+        self._weekday = weekday
+        super().__init__(*args, **kwargs)
+
+    def _get_date_steps(self) -> List[pd.Timestamp]:
+        """
+        Overview:
+            Get date of each step, one day a week.
+        """
+        dates = pd.DataFrame({"date": self.ds.dates}, index=self.ds.dates)
+        dates["week"] = dates["date"].dt.strftime("%Y-%W")
+        # Discard the first incomplete weeks.
+        edge_week = dates["week"].unique()[0]
+        if dates[dates["week"] == edge_week].shape[0] < 5:
+            dates = dates[dates["week"] != edge_week]
+        # Convert to series
+        dates = dates["date"]
+        date_steps = dates.groupby(pd.Grouper(freq="W")).head(self._weekday)
+        date_steps = date_steps.groupby(pd.Grouper(freq="W")).tail(1)
+        return date_steps.tolist()
+
+    def _query_obs(self, trading_date: pd.Timestamp) -> Tuple[pd.DataFrame, pd.Timestamp]:
+        """
+        Overview:
+            Find the next reward date and query previous 5 day's obs.
+        Arguments:
+            - date: the next trading date which will not include in obs
+        """
+        step_idx = self.date_steps.index(trading_date)
+        obs_dates = []
+        if step_idx == len(self.date_steps) - 1:
+            # If in the last trading date, return the finally 5 days of data source as obs.
+            obs_dates = self.ds.dates[-5:]
+        else:
+            # Five days before next trading date
+            date = self.date_steps[step_idx + 1]
+            for _ in range(5):
+                date = self.ds.prev_date(date)
+                obs_dates.insert(0, date)
+        reward_date = obs_dates[-1]
+        obs_data = []
+        for date in obs_dates:
+            obs = self.ds.query_obs(date=date)
+            obs_data.append(obs)
+        obs_data = pd.concat(obs_data, axis=1).fillna(0)
+        return obs_data, reward_date

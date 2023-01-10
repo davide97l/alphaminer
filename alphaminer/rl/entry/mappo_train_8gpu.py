@@ -208,9 +208,10 @@ if __name__ == '__main__':
     parser.add_argument('-ss', '--sample-size', type=int, default=None)
     parser.add_argument('-sl', '--slippage', type=float, default=0.00246)
     parser.add_argument('-nc', '--no-cost', action='store_true')
-    parser.add_argument('-an', '--action_norm', choices=['softmax', 'cut_softmax', 'uniform', 'gumbel_softmax', None], default=None)
+    parser.add_argument('-an', '--action_norm', default=None)
     parser.add_argument('--exp-name', type=str, default=None)
     parser.add_argument('--data-path', type=str, default=None)
+    parser.add_argument('-po', '--portfolio-optimizer', type=str, default="topk")
     parser.add_argument('--local_rank', type=int)
     args = parser.parse_args()
     if args.exp_name is None:

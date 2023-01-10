@@ -136,7 +136,7 @@ class MAQACv2(nn.Module):
             actor_head_hidden_size,
             action_shape,
             actor_head_layer_num,
-            final_tanh=True,
+            #final_tanh=True,
             activation=activation,
             norm_type=norm_type
         )

@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import qlib
 from alphaminer.rl.gtja_env import GTJADataSource
-from alphaminer.rl.env import TradingPolicy, RandomSampleEnv
+from alphaminer.rl.env import TradingPolicy, RandomSampleWrapper, TradingEnv
 from os import path as osp
 from unittest.mock import patch
 from qlib.data import D
@@ -44,7 +44,8 @@ def test_gtja_env():
                                                                                                   mock_qlib_calendar):
         ds = GTJADataSource(start_date="2019-01-01", end_date="2019-01-10", data_dir=get_data_path())
         tp = TradingPolicy(data_source=ds)
-        env = RandomSampleEnv(n_sample=500, data_source=ds, trading_policy=tp, max_episode_steps=5)
+        env = TradingEnv(data_source=ds, trading_policy=tp, max_episode_steps=5)
+        env = RandomSampleWrapper(env, n_sample=500)
         obs = env.reset()
         init_codes = obs.index.tolist()
         assert len(init_codes) > 1

@@ -1,4 +1,5 @@
-from alphaminer.rl.env import DataSource, TradingEnv, TradingPolicy, Portfolio, TradingRecorder, RandomSampleEnv, TopkOptimizer
+from alphaminer.rl.env import DataSource, TradingEnv, TradingPolicy, Portfolio, \
+        TradingRecorder, TopkOptimizer, WeeklyEnv, RandomSampleWrapper
 from os import path as osp
 from qlib.data.dataset import DataHandler
 from qlib.data import D
@@ -113,8 +114,8 @@ def test_trading_policy():
     })
     tp = TradingPolicy(data_source=ds)
     date = "2012-06-15"
-    pf, log_change = tp.take_step(date, action, portfolio=pf)
-    assert log_change < 0 and log_change > -0.01
+    pf = tp.take_step(date, action, portfolio=pf)
+
     price = ds.query_trading_data(date, pf.positions.index.tolist())["close"]
     old_nav = pf.nav(price)
 
@@ -123,31 +124,12 @@ def test_trading_policy():
         "SH600006": 0.6,  # Buy
         "SH600008": 0.5,  # Buy
     })
-    pf, log_change = tp.take_step(date, new_action, portfolio=pf)
-    assert log_change > np.log(0.9) and log_change < np.log(1.1)
+    pf = tp.take_step(date, new_action, portfolio=pf)
+
     price = ds.query_trading_data(date, pf.positions.index.tolist())["close"]
     new_nav = pf.nav(price)
 
     assert new_nav / old_nav < 0.81
-
-
-def test_trading_policy_with_benchmark_index():
-    ds = DataSource(
-        start_date="2010-01-01",
-        end_date="2020-01-01",
-        market="csi500",
-        data_handler=SimpleDataHandler(D.instruments("csi500"), start_time="2010-01-01", end_time="2020-01-01")
-    )
-    pf = Portfolio(cash=800000)
-
-    action = pd.Series({
-        "SH600006": 1.1,  # Buy
-        "SH600008": 0,
-    })
-    tp = TradingPolicy(data_source=ds, use_benchmark=True, benchmark_index="SH000905")
-    date = "2012-06-15"
-    pf, log_change = tp.take_step(date, action, portfolio=pf)
-    assert log_change > 0 and log_change < 0.02
 
 
 def test_trading_env():
@@ -186,11 +168,30 @@ def test_trading_env():
         assert len(record_files) == 1
         df = pd.read_csv(osp.join(tempdir, record_files[0]), index_col=0)
         print(df)
-        assert df.shape == (5, 6)
+        assert df.shape[0] == 6
         assert "2011-11" in str(df.index[0])
     finally:
         if osp.exists(tempdir):
             shutil.rmtree(tempdir)
+
+
+def test_reward_with_benchmark_index():
+    ds = DataSource(
+        start_date="2011-11-01",
+        end_date="2011-11-08",
+        market="csi500",
+        data_handler=SimpleDataHandler(D.instruments("csi500"), start_time="2010-01-01", end_time="2020-01-01")
+    )
+    tp = TradingPolicy(data_source=ds)
+    env = TradingEnv(
+        data_source=ds, trading_policy=tp, max_episode_steps=5, use_benchmark=True, benchmark_index="SH000905"
+    )
+    obs = env.reset()
+    assert obs.shape[1] > 1
+
+    action = pd.Series(np.random.rand(obs.shape[0]), index=obs.index)
+    obs, reward, *_ = env.step(action)
+    assert reward > -0.01 and reward < 0
 
 
 def test_stable_stock_index():
@@ -233,7 +234,7 @@ def test_stable_stock_index():
     assert obs.index.tolist() == ['sh600021', 'sh600008']
 
 
-def test_random_sample_env():
+def test_random_sample_wrapper():
     ds = DataSource(
         start_date="2011-11-01",
         end_date="2011-11-08",
@@ -241,7 +242,7 @@ def test_random_sample_env():
         data_handler=SimpleDataHandler(D.instruments("csi500"), start_time="2010-01-01", end_time="2020-01-01")
     )
     tp = TradingPolicy(data_source=ds)
-    env = RandomSampleEnv(n_sample=1, data_source=ds, trading_policy=tp, max_episode_steps=5)
+    env = RandomSampleWrapper(TradingEnv(data_source=ds, trading_policy=tp, max_episode_steps=5), n_sample=1)
     obs = env.reset()
     assert obs.shape[0] == 1
     code = obs.index[0]
@@ -294,3 +295,49 @@ def test_paused_stock():
     # NAV need to include the value of the last day of delisted stocks
     assert replay["nav"].iloc[-1] > 1e6
     assert replay["position"]["sh600068"].iloc[-1] > 0
+
+
+def test_weekly_env():
+    start_date = "2011-01-06"
+    end_date = "2011-01-25"
+    ds = DataSource(
+        start_date=start_date,
+        end_date=end_date,
+        market="csi500",
+        data_handler=SimpleDataHandler(D.instruments("csi500"), start_time=start_date, end_time=end_date)
+    )
+    tp = TradingPolicy(data_source=ds)
+    env = WeeklyEnv(data_source=ds, trading_policy=tp, max_episode_steps=2, use_benchmark=False)
+    env = RandomSampleWrapper(env, n_sample=1)
+    assert len(env.date_steps) == 3
+    obs = env.reset()
+    assert obs.shape[1] == 3 * 5
+    reward = 0
+    # 01-14 - 01-21
+    action = pd.Series(np.random.rand(obs.shape[0]), index=obs.index)
+    obs, reward, *_ = env.step(action)
+    assert reward < -0.03
+    # 01-21 - 01-25
+    action = pd.Series(np.random.rand(obs.shape[0]), index=obs.index)
+    obs, reward, *_ = env.step(action)
+    assert reward > -0.01
+
+
+def test_done_reward():
+    ds = DataSource(
+        start_date="2011-11-01",
+        end_date="2011-11-08",
+        market="csi500",
+        data_handler=SimpleDataHandler(D.instruments("csi500"), start_time="2010-01-01", end_time="2020-01-01")
+    )
+    tp = TradingPolicy(data_source=ds)
+    env = TradingEnv(data_source=ds, trading_policy=tp, max_episode_steps=5, done_reward="sharpe")
+    obs = env.reset()
+    done = False
+    reward = 0
+    for _ in range(5):
+        action = pd.Series(np.random.rand(obs.shape[0]), index=obs.index)
+        obs, reward, done, _ = env.step(action)
+        assert isinstance(reward, float)
+    assert done
+    assert reward > 0 and reward < 1e2

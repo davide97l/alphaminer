@@ -56,6 +56,11 @@ def get_env_config(args, market, start_time, end_time, env_cls=DingTradingEnv):
             end_time=end_time,
         ),
         action_norm=args.action_norm,
+        freq=args.freq,
+        done_reward=args.done_reward,
+        p_sticky_action=args.p_sticky_action,
+        p_random_action=args.p_random_action,
+        action_feature=args.action_obs,
     )
     env_config = EasyDict(env_config)
     env_config.data_handler.type = {
@@ -72,6 +77,7 @@ def get_env_config(args, market, start_time, end_time, env_cls=DingTradingEnv):
 
 def get_policy_config(args, policy_cls, collector_cls, evaluator_cls, learner_cls, buffer_cls=None):
     sample_size = args.sample_size
+    obs_multiplier = 5 if args.freq == "weekly" else 1
     ppo_config = dict(
         cuda=True,
         action_space='continuous',
@@ -88,18 +94,18 @@ def get_policy_config(args, policy_cls, collector_cls, evaluator_cls, learner_cl
         eval=dict(evaluator=dict(eval_freq=5000, )),
         model=dict(
             agent_obs_shape={
-                'basic': 6,
-                '158': 158,
-                '360': 360,
-                '518': 518,
-                'guotai': 10,
+                'basic': 6 * obs_multiplier,
+                '158': 158 * obs_multiplier,
+                '360': 360 * obs_multiplier,
+                '518': 518 * obs_multiplier,
+                'guotai': 10 * obs_multiplier,
             }[args.env_type],
             global_obs_shape={
-                'basic': 6 * (500 if not sample_size else sample_size),
-                '158': 158 * (500 if not sample_size else sample_size),
-                '360': 360 * (500 if not sample_size else sample_size),
-                '518': 518 * (500 if not sample_size else sample_size),
-                'guotai': 10 * (50 if not sample_size else sample_size),
+                'basic': 6 * obs_multiplier * (500 if not sample_size else sample_size),
+                '158': 158 * obs_multiplier * (500 if not sample_size else sample_size),
+                '360': 360 * obs_multiplier * (500 if not sample_size else sample_size),
+                '518': 518 * obs_multiplier * (500 if not sample_size else sample_size),
+                'guotai': 10 * obs_multiplier * (50 if not sample_size else sample_size),
             }[args.env_type],
             action_shape=1,
             agent_num={
@@ -109,10 +115,15 @@ def get_policy_config(args, policy_cls, collector_cls, evaluator_cls, learner_cl
                 '518': 500 if not sample_size else sample_size,
                 'guotai': 50 if not sample_size else sample_size,
             }[args.env_type],
+            #bound_type='tanh',
         )
     )
 
     policy_config = EasyDict(ppo_config)
+    if args.action_obs:
+        policy_config.model.agent_obs_shape += 1
+
+    print(policy_config.model.agent_obs_shape)
 
     policy_config = deep_merge_dicts(policy_cls.default_config(), policy_config)
     policy_config.collect.collector = deep_merge_dicts(collector_cls.default_config(), policy_config.collect.collector)
@@ -132,6 +143,7 @@ def main(cfg, args):
 
     collect_env_cfg = get_env_config(args, market, args.train_start_time, args.train_end_time, env_cls=DingMATradingEnv)
     eval_env_cfg = get_env_config(args, market, args.eval_start_time, args.eval_end_time, env_cls=DingMATradingEnv)
+    eval_env_cfg.p_sticky_action, eval_env_cfg.p_random_action = 0., 0.  # no additional stochasticity in eval env
     cfg.env.manager = deep_merge_dicts(SyncSubprocessEnvManager.default_config(), cfg.env.manager)
 
     policy_cfg = get_policy_config(args, PPOPolicy, EpisodeSerialCollector, InteractionSerialEvaluator, BaseLearner)
@@ -146,7 +158,7 @@ def main(cfg, args):
     # args.top_n = 20
 
     collect_env_temp = DingMATradingEnv(collect_env_cfg)
-    evaluate_env_temp = DingMATradingEnv(eval_env_cfg)
+    evaluate_env_temp = DingMATradingEnv({**eval_env_cfg, "done_reward": "default"})
     collector_env = SyncSubprocessEnvManager(
         env_fn=[lambda: collect_env_temp for _ in range(args.collect_env_num)],
         cfg=cfg.env.manager,
@@ -219,12 +231,15 @@ if __name__ == '__main__':
     parser.add_argument('-ss', '--sample-size', type=int, default=None)
     parser.add_argument('-sl', '--slippage', type=float, default=0.00246)
     parser.add_argument('-nc', '--no-cost', action='store_true')
-    parser.add_argument(
-        '-an', '--action_norm', choices=['softmax', 'cut_softmax', 'uniform', 'gumbel_softmax', None], default=None
-    )
+    parser.add_argument('-an', '--action_norm', default=None)
     parser.add_argument('--exp-name', type=str, default=None)
     parser.add_argument('--data-path', type=str, default=None)
     parser.add_argument('-po', '--portfolio-optimizer', type=str, default="topk")
+    parser.add_argument('-fq', '--freq', type=str, choices=["daily", "weekly"], default="daily")
+    parser.add_argument('-dr', '--done-reward', type=str, choices=["default", "sharpe"], default="default")
+    parser.add_argument('-sa', '--p-sticky-action', type=float, default=0.)
+    parser.add_argument('-ra', '--p-random-action', type=float, default=0.)
+    parser.add_argument('-ao', '--action-obs', action='store_true')  # implemented only for mappo
     args = parser.parse_args()
     if args.exp_name is None:
         args.exp_name = default_exp_name('mappo', args)

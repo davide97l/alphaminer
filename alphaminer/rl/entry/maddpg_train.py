@@ -39,10 +39,15 @@ def get_env_config(args, market, start_time, end_time, env_cls=DingTradingEnv):
         start_date=start_time,
         end_date=end_time,
         random_sample=args.sample_size,
+        # only used by env that don't use Qlib data
+        data_path=args.data_path,  # 'guotai': '../../../data/guotai_factors/'
         strategy=dict(
             buy_top_n=args.top_n,
             slippage=args.slippage,
+            commission=0 if args.no_cost else 0.0003,
+            stamp_duty=0 if args.no_cost else 0.001,
         ),
+        portfolio_optimizer=args.portfolio_optimizer,
         data_handler=dict(
             type=None,
             instruments=market,
@@ -55,6 +60,9 @@ def get_env_config(args, market, start_time, end_time, env_cls=DingTradingEnv):
     env_config.data_handler.type = {
         'basic': None,
         '158': 'alpha158',
+        '360': 'alpha360',
+        '518': 'alpha518',
+        'guotai': 'guotai',
     }[args.env_type]
 
     env_config = deep_merge_dicts(env_cls.default_config(), env_config)
@@ -89,15 +97,24 @@ def get_policy_config(args, policy_cls, collector_cls, evaluator_cls, learner_cl
             agent_obs_shape={
                 'basic': 6,
                 '158': 158,
+                '360': 360,
+                '518': 518,
+                'guotai': 10,
             }[args.env_type],
             global_obs_shape={
                 'basic': 6 * (500 if not sample_size else sample_size),
                 '158': 158 * (500 if not sample_size else sample_size),
+                '360': 360 * (500 if not sample_size else sample_size),
+                '518': 518 * (500 if not sample_size else sample_size),
+                'guotai': 10 * (50 if not sample_size else sample_size),
             }[args.env_type],
             action_shape=1,
             agent_num={
                 'basic': 500 if not sample_size else sample_size,
                 '158': 500 if not sample_size else sample_size,
+                '360': 500 if not sample_size else sample_size,
+                '518': 500 if not sample_size else sample_size,
+                'guotai': 50 if not sample_size else sample_size,
             }[args.env_type],
         )
     )
@@ -225,10 +242,11 @@ if __name__ == '__main__':
     parser.add_argument('-ss', '--sample-size', type=int, default=None)
     parser.add_argument('-sl', '--slippage', type=float, default=0.00246)
     parser.add_argument('-nc', '--no-cost', action='store_true')
-    parser.add_argument('-an', '--action_norm', choices=['softmax', 'cut_softmax', 'uniform', 'gumbel_softmax', None], default=None)
+    parser.add_argument('-an', '--action_norm', default=None)
     parser.add_argument('--exp-name', type=str, default=None)
     parser.add_argument('--data-path', type=str, default=None)
+    parser.add_argument('-po', '--portfolio-optimizer', type=str, default="topk")
     args = parser.parse_args()
     if args.exp_name is None:
-        args.exp_name = default_exp_name('maddpg', args)
+        args.exp_name = default_exp_name('mappo', args)
     main(main_config, args)
