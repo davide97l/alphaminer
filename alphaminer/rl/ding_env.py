@@ -58,7 +58,8 @@ class DingTradingEnv(BaseEnv):
         done_reward="default",
         p_sticky_action=0.,
         p_random_action=0.,
-        action_feature=True,
+        action_feature=False,
+        action_same_prob=False,
     )
 
     def __init__(self, cfg: dict) -> None:
@@ -79,6 +80,7 @@ class DingTradingEnv(BaseEnv):
         self.p_random_action = self._cfg.p_random_action
         self.prev_action = None
         self.action_feature = self._cfg.action_feature
+        self.action_same_prob = self._cfg.action_same_prob
 
     def reset(self) -> np.ndarray:
         if hasattr(self, '_seed') and hasattr(self, '_dynamic_seed') and self._dynamic_seed:
@@ -87,6 +89,7 @@ class DingTradingEnv(BaseEnv):
         elif hasattr(self, '_seed'):
             self.seed(self._seed)
         obs = self._env.reset()
+        self.prev_action = None
         self.obs_df = obs  # this is because action needs obs.index to be initialized, so we store the obs in df format
         obs = to_ndarray(obs.values).astype('float32')
         return obs.flatten()
@@ -100,14 +103,9 @@ class DingTradingEnv(BaseEnv):
         np.random.seed(self._seed)
 
     def step(self, action: Union[np.ndarray, list]) -> BaseEnvTimestep:
-        if self.prev_action is None:
-            self.prev_action = self.action_to_series(np.zeros_like(action))
-        if random.random() <= self.p_sticky_action:
-            action = self.prev_action
-        elif random.random() <= self.p_random_action:
-            action = self.random_action()
-        else:
-            action = self.action_to_series(action)
+        action = self.action_to_series(action)
+        if self.p_random_action > 0 or self.p_sticky_action > 0:
+            action = self.stochastic_action(action)
         obs, rew, done, info = self._env.step(action)
         self.obs_df = obs  # keep a copy of the original df obs
         obs = to_ndarray(obs.values).astype(np.float32)
@@ -230,11 +228,11 @@ class DingMATradingEnv(DingTradingEnv):
         elif hasattr(self, '_seed'):
             self.seed(self._seed)
         raw_obs = self._env.reset()
+        self.prev_action = None
         self.obs_df = raw_obs  # this is because action needs obs.index to be initialized, so we store the obs in df format
         agent_obs = to_ndarray(copy.deepcopy(raw_obs.values)).astype('float32')
         if self.action_feature:
             action_agent_obs = self.get_action_feature(agent_obs)
-        print(action_agent_obs.shape)
         action_mask = np.ones((500, 1))
         obs = {
             'global_state': agent_obs.flatten(),
@@ -245,14 +243,9 @@ class DingMATradingEnv(DingTradingEnv):
 
     def step(self, action: Union[np.ndarray, list]) -> BaseEnvTimestep:
         action = to_ndarray(action).astype(np.float32)
-        if self.prev_action is None:
-            self.prev_action = self.action_to_series(np.zeros_like(action))
-        if random.random() <= self.p_sticky_action:
-            action = self.prev_action
-        elif random.random() <= self.p_random_action:
-            action = self.random_action()
-        else:
-            action = self.action_to_series(action)
+        action = self.action_to_series(action)
+        if self.p_random_action > 0 or self.p_sticky_action > 0:
+            action = self.stochastic_action(action)
         raw_obs, rew, done, info = self._env.step(action)
         self.obs_df = raw_obs  # keep a copy of the original df obs
         agent_obs = to_ndarray(copy.deepcopy(raw_obs.values)).astype('float32')
@@ -267,6 +260,28 @@ class DingMATradingEnv(DingTradingEnv):
         rew = to_ndarray([rew]).astype(np.float32)
         self.prev_action = action
         return BaseEnvTimestep(obs, rew, done, info)
+
+    def stochastic_action(self, action):
+        if self.prev_action is not None:  # don't use stochastic actions in first step
+            action_array = action.to_numpy()
+            prev_action_array = self.prev_action.to_numpy()
+            if self.p_sticky_action > 0:
+                if self.action_same_prob and random.random() <= self.p_sticky_action:
+                    action = self.prev_action  # all actions are sticky or not
+                else:
+                    mask = np.random.choice([0, 1], size=len(action),
+                                            p=[1 - self.p_sticky_action, self.p_sticky_action])
+                    action_array[mask] = prev_action_array
+            elif self.p_random_action > 0:
+                if self.action_same_prob and random.random() <= self.p_random_action:
+                    action = self.random_action()  # all actions are random
+                else:
+                    mask = np.random.choice([0, 1], size=len(action),
+                                            p=[1 - self.p_sticky_action, self.p_sticky_action])
+                    action_array[mask] = self.random_action().to_numpy()
+            return self.action_to_series(action)
+        else:
+            return action
 
     def get_action_feature(self, agent_obs):
         if self.prev_action is None:

@@ -61,6 +61,7 @@ def get_env_config(args, market, start_time, end_time, env_cls=DingTradingEnv):
         p_sticky_action=args.p_sticky_action,
         p_random_action=args.p_random_action,
         action_feature=args.action_obs,
+        action_same_prob=args.action_same_prob,
     )
     env_config = EasyDict(env_config)
     env_config.data_handler.type = {
@@ -240,6 +241,7 @@ if __name__ == '__main__':
     parser.add_argument('-sa', '--p-sticky-action', type=float, default=0.)
     parser.add_argument('-ra', '--p-random-action', type=float, default=0.)
     parser.add_argument('-ao', '--action-obs', action='store_true')  # implemented only for mappo
+    parser.add_argument('-asp', '--action-same-prob', action='store_true')
     args = parser.parse_args()
     if args.exp_name is None:
         args.exp_name = default_exp_name('mappo', args)
