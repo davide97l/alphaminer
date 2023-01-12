@@ -556,6 +556,19 @@ class TradingEnv(gym.Env):
             benchmark_index: Optional[str] = None,
             done_reward: str = "default",
     ) -> None:
+        """
+        Overview:
+            Trading env.
+        Arguments:
+            - data_source: the data source instance.
+            - trading_policy: trading policy instance.
+            - max_episode_steps: max steps to finish an episode.
+            - cash: initial cash in portfolio.
+            - recorder: the recorder instance.
+            - use_benchmark: whether subtract the reward of the benchmark, default is True.
+            - benchmark_index: whether use index price as benchmark, default is None.
+            - done_reward: how to calculate the reward of the final step.
+        """
         super().__init__()
         self.ds = data_source
         self.date_steps = self._get_date_steps()

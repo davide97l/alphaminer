@@ -190,6 +190,29 @@ class DingTradingEnv(BaseEnv):
         action = self.action_to_series(action)
         return action
 
+    def stochastic_action(self, action):
+        if self.prev_action is not None:  # don't use stochastic actions in first step
+            action_array = action.to_numpy()
+            prev_action_array = self.prev_action.to_numpy()
+            if self.p_sticky_action > 0:
+                if self.action_same_prob and random.random() <= self.p_sticky_action:
+                    return self.prev_action  # all actions are sticky or not
+                else:
+                    mask = np.random.choice([0, 1], size=len(action),
+                                            p=[1 - self.p_sticky_action, self.p_sticky_action])
+                    action_array = np.where(mask, prev_action_array, action_array)
+                    return self.action_to_series(action_array)
+            elif self.p_random_action > 0:
+                if self.action_same_prob and random.random() <= self.p_random_action:
+                    return self.random_action()  # all actions are random
+                else:
+                    mask = np.random.choice([0, 1], size=len(action),
+                                            p=[1 - self.p_random_action, self.p_random_action])
+                    action_array = np.where(mask, self.random_action().to_numpy(), action_array)
+                    return self.action_to_series(action_array)
+        else:
+            return action
+
     def __repr__(self) -> str:
         return "Alphaminer Trading Env"
 
@@ -260,28 +283,6 @@ class DingMATradingEnv(DingTradingEnv):
         rew = to_ndarray([rew]).astype(np.float32)
         self.prev_action = action
         return BaseEnvTimestep(obs, rew, done, info)
-
-    def stochastic_action(self, action):
-        if self.prev_action is not None:  # don't use stochastic actions in first step
-            action_array = action.to_numpy()
-            prev_action_array = self.prev_action.to_numpy()
-            if self.p_sticky_action > 0:
-                if self.action_same_prob and random.random() <= self.p_sticky_action:
-                    action = self.prev_action  # all actions are sticky or not
-                else:
-                    mask = np.random.choice([0, 1], size=len(action),
-                                            p=[1 - self.p_sticky_action, self.p_sticky_action])
-                    action_array[mask] = prev_action_array
-            elif self.p_random_action > 0:
-                if self.action_same_prob and random.random() <= self.p_random_action:
-                    action = self.random_action()  # all actions are random
-                else:
-                    mask = np.random.choice([0, 1], size=len(action),
-                                            p=[1 - self.p_sticky_action, self.p_sticky_action])
-                    action_array[mask] = self.random_action().to_numpy()
-            return self.action_to_series(action)
-        else:
-            return action
 
     def get_action_feature(self, agent_obs):
         if self.prev_action is None:
