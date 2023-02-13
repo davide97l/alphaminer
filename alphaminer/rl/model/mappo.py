@@ -6,8 +6,6 @@ from ding.utils import SequenceType, squeeze
 from ding.model.common import ReparameterizationHead, RegressionHead, FCEncoder
 
 from .utils import ReducedRegressionHead
-from torch.nn import Dropout
-from ding.torch_utils import ResFCBlock, ResBlock
 
 
 class MAVACv1(nn.Module):
@@ -111,7 +109,6 @@ class MAVACv2(nn.Module):
         sigma_type: Optional[str] = 'independent',
         bound_type: Optional[str] = None,
         critic_input_size: Optional[int] = None,
-        dropout: float = 0.
     ) -> None:
         super().__init__()
         agent_obs_shape: int = squeeze(agent_obs_shape)
@@ -119,21 +116,12 @@ class MAVACv2(nn.Module):
         action_shape: int = squeeze(action_shape)
         self.global_obs_shape, self.agent_obs_shape, self.action_shape = global_obs_shape, agent_obs_shape, action_shape
 
-        if dropout == 0.:
-            self.encoder = FCEncoder(
-                obs_shape=agent_obs_shape,
-                hidden_size_list=encoder_hidden_size_list,
-                activation=activation,
-                norm_type=norm_type
-            )
-        else:
-            self.encoder = DropOutFCEncoder(
-                obs_shape=agent_obs_shape,
-                hidden_size_list=encoder_hidden_size_list,
-                activation=activation,
-                norm_type=norm_type,
-                dropout=dropout
-            )
+        self.encoder = FCEncoder(
+            obs_shape=agent_obs_shape,
+            hidden_size_list=encoder_hidden_size_list,
+            activation=activation,
+            norm_type=norm_type
+        )
 
         self.critic_head = ReducedRegressionHead(
             encoder_hidden_size_list[-1] * agent_num if critic_input_size is None else critic_input_size,
@@ -186,56 +174,3 @@ class MAVACv2(nn.Module):
         x2 = x.reshape(x.shape[0], -1)
         x2 = self.critic_head(x2)
         return {'logit': x1, 'value': x2['pred']}
-
-
-class DropOutFCEncoder(FCEncoder):
-    """
-    Overview:
-        The ``FCEncoder`` used in models to encode raw 1-dim observations.
-    Interfaces:
-        ``__init__``, ``forward``.
-    """
-
-    def __init__(
-            self,
-            obs_shape: int,
-            hidden_size_list: SequenceType,
-            res_block: bool = False,
-            activation: Optional[nn.Module] = nn.ReLU(),
-            norm_type: Optional[str] = None,
-            dropout: float = 0.5
-    ) -> None:
-        """
-        Overview:
-            Init the FC Encoder according to arguments.
-        Arguments:
-            - obs_shape (:obj:`int`): Observation shape.
-            - hidden_size_list (:obj:`SequenceType`): Sequence of ``hidden_size`` of subsequent FC layers.
-            - res_block (:obj:`bool`): Whether use ``res_block``. Default is ``False``.
-            - activation (:obj:`nn.Module`): Type of activation to use in ``ResFCBlock``. Default is ``nn.ReLU()``.
-            - norm_type (:obj:`str`): Type of normalization to use. See ``ding.torch_utils.network.ResFCBlock`` \
-                for more details. Default is ``None``.
-        """
-        super(DropOutFCEncoder, self).__init__(obs_shape, hidden_size_list)
-        self.obs_shape = obs_shape
-        self.act = activation
-        self.init = nn.Linear(obs_shape, hidden_size_list[0])
-
-        if res_block:
-            assert len(set(hidden_size_list)) == 1, "Please indicate the same hidden size for res block parts"
-            if len(hidden_size_list) == 1:
-                self.main = nn.Sequential(ResFCBlock(hidden_size_list[0], activation=self.act, norm_type=norm_type),
-                                          Dropout(p=dropout))
-            else:
-                layers = []
-                for i in range(len(hidden_size_list)):
-                    layers.append(ResFCBlock(hidden_size_list[0], activation=self.act, norm_type=norm_type))
-                    layers.append(Dropout(p=dropout))
-                self.main = nn.Sequential(*layers)
-        else:
-            layers = []
-            for i in range(len(hidden_size_list) - 1):
-                layers.append(nn.Linear(hidden_size_list[i], hidden_size_list[i + 1]))
-                layers.append(self.act)
-                layers.append(Dropout(p=dropout))
-            self.main = nn.Sequential(*layers)

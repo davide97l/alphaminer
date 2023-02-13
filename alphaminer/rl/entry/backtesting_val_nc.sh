@@ -1,0 +1,10 @@
+#!/bin/bash
+
+python eval.py --env-type 158 --top-n 50 --load-path /Users/weiyuhui/Desktop/projects/alphaminer/exp/weights/alpha158_sa25_asp_wc/avg_best_at_3735000.pth.tar --exp-name val_sa25_nc_sl --start-time 2017-07-01 --end-time 2018-12-31 -cs 1600 -nc -sl 0
+python eval.py --env-type 158 --top-n 50 --load-path /Users/weiyuhui/Desktop/projects/alphaminer/exp/weights/alpha158_sa25_asp_wc/avg_best_at_3735000.pth.tar --exp-name val_sa25_nc_sl_top10 --start-time 2017-07-01 --end-time 2018-12-31 -cs 1600 -t 10 -nc -sl 0
+python eval.py --env-type 158 --top-n 50 --load-path /Users/weiyuhui/Desktop/projects/alphaminer/exp/weights/alpha158_sa25_asp_wc/avg_best_at_3735000.pth.tar --exp-name val_sa25_nc_sl_evalsa90 --start-time 2017-07-01 --end-time 2018-12-31 -cs 1600 -sa 90 -asp -nc -sl 0
+python eval.py --env-type 158 --top-n 50 --load-path /Users/weiyuhui/Desktop/projects/alphaminer/exp/weights/alpha158_sa25_asp_wc/avg_best_at_3735000.pth.tar --exp-name val_sa25_nc_sl_evalsa90_top10 --start-time 2017-07-01 --end-time 2018-12-31 -cs 1600 -sa 90 -asp -t 10 -nc -sl 0
+python eval.py --env-type 158 --top-n 50 --load-path /Users/weiyuhui/Desktop/projects/alphaminer/exp/weights/alpha158_sa25_asp_wc/avg_best_at_3735000.pth.tar --exp-name train_sa25_nc_sl --start-time 2010-01-01 --end-time 2016-12-31 -cs 1600 -nc -sl 0
+python eval.py --env-type 158 --top-n 50 --load-path /Users/weiyuhui/Desktop/projects/alphaminer/exp/weights/alpha158_sa25_asp_wc/avg_best_at_3735000.pth.tar --exp-name train_sa25_nc_sl_top10 --start-time 2010-01-01 --end-time 2016-12-31 -cs 1600 -t 10 -nc -sl 0
+python eval.py --env-type 158 --top-n 50 --load-path /Users/weiyuhui/Desktop/projects/alphaminer/exp/weights/alpha158_sa25_asp_wc/avg_best_at_3735000.pth.tar --exp-name train_sa25_nc_sl_evalsa90 --start-time 2010-01-01 --end-time 2016-12-31 -cs 1600 -sa 90 -asp -nc -sl 0
+python eval.py --env-type 158 --top-n 50 --load-path /Users/weiyuhui/Desktop/projects/alphaminer/exp/weights/alpha158_sa25_asp_wc/avg_best_at_3735000.pth.tar --exp-name train_sa25_nc_sl_evalsa90_top10 --start-time 2010-01-01 --end-time 2016-12-31 -cs 1600 -sa 90 -asp -t 10 -nc -sl 0

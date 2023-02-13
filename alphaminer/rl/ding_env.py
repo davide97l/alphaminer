@@ -3,6 +3,7 @@ import copy
 import numpy as np
 import gym
 import pandas as pd
+import logging
 from easydict import EasyDict
 
 from ding.envs import BaseEnv, BaseEnvTimestep
@@ -14,7 +15,6 @@ from alphaminer.data.handler import AlphaMinerHandler
 from alphaminer.data.alpha518_handler import Alpha518
 from qlib.contrib.data.handler import Alpha158, Alpha360
 from alphaminer.rl.gtja_env import GTJADataSource
-import random
 
 try:
     from ding.envs import EvalEpisodeReturnEnv
@@ -56,10 +56,6 @@ class DingTradingEnv(BaseEnv):
         data_path=None,
         freq="daily",
         done_reward="default",
-        p_sticky_action=0.,
-        p_random_action=0.,
-        action_feature=False,
-        action_same_prob=False,
     )
 
     def __init__(self, cfg: dict) -> None:
@@ -76,11 +72,6 @@ class DingTradingEnv(BaseEnv):
         self._reward_space = gym.spaces.Box(
             low=self._env.reward_range[0], high=self._env.reward_range[1], shape=(1, ), dtype=np.float32
         )
-        self.p_sticky_action = self._cfg.p_sticky_action
-        self.p_random_action = self._cfg.p_random_action
-        self.prev_action = None
-        self.action_feature = self._cfg.action_feature
-        self.action_same_prob = self._cfg.action_same_prob
 
     def reset(self) -> np.ndarray:
         if hasattr(self, '_seed') and hasattr(self, '_dynamic_seed') and self._dynamic_seed:
@@ -89,7 +80,6 @@ class DingTradingEnv(BaseEnv):
         elif hasattr(self, '_seed'):
             self.seed(self._seed)
         obs = self._env.reset()
-        self.prev_action = None
         self.obs_df = obs  # this is because action needs obs.index to be initialized, so we store the obs in df format
         obs = to_ndarray(obs.values).astype('float32')
         return obs.flatten()
@@ -103,23 +93,17 @@ class DingTradingEnv(BaseEnv):
         np.random.seed(self._seed)
 
     def step(self, action: Union[np.ndarray, list]) -> BaseEnvTimestep:
+        action = to_ndarray(action).astype(np.float32)
         action = self.action_to_series(action)
-        if self.p_random_action > 0 or self.p_sticky_action > 0:
-            action = self.stochastic_action(action)
         obs, rew, done, info = self._env.step(action)
         self.obs_df = obs  # keep a copy of the original df obs
         obs = to_ndarray(obs.values).astype(np.float32)
         rew = to_ndarray([rew]).astype(np.float32)
-        self.prev_action = action
         return BaseEnvTimestep(obs.flatten(), rew, done, info)
 
     def action_to_series(self, action):
         if 'action_norm' in self._cfg.keys():
             action = norm_action(action, self._cfg.action_norm)
-        action[action < 0] = 0
-        if sum(action) < 1e-6:
-            action[:] = 1
-        action = action / sum(action)
         return pd.Series(action, index=self.obs_df.index)  # need the original df obs to perform action
 
     def _make_env(self):
@@ -190,29 +174,6 @@ class DingTradingEnv(BaseEnv):
         action = self.action_to_series(action)
         return action
 
-    def stochastic_action(self, action):
-        if self.prev_action is not None:  # don't use stochastic actions in first step
-            action_array = action.to_numpy()
-            prev_action_array = self.prev_action.to_numpy()
-            if self.p_sticky_action > 0:
-                if self.action_same_prob and random.random() <= self.p_sticky_action:
-                    return self.prev_action  # all actions are sticky or not
-                else:
-                    mask = np.random.choice([0, 1], size=len(action),
-                                            p=[1 - self.p_sticky_action, self.p_sticky_action])
-                    action_array = np.where(mask, prev_action_array, action_array)
-                    return self.action_to_series(action_array)
-            elif self.p_random_action > 0:
-                if self.action_same_prob and random.random() <= self.p_random_action:
-                    return self.random_action()  # all actions are random
-                else:
-                    mask = np.random.choice([0, 1], size=len(action),
-                                            p=[1 - self.p_random_action, self.p_random_action])
-                    action_array = np.where(mask, self.random_action().to_numpy(), action_array)
-                    return self.action_to_series(action_array)
-        else:
-            return action
-
     def __repr__(self) -> str:
         return "Alphaminer Trading Env"
 
@@ -245,21 +206,25 @@ class DingTradingEnv(BaseEnv):
 class DingMATradingEnv(DingTradingEnv):
 
     def reset(self) -> np.ndarray:
-        if hasattr(self, '_seed') and hasattr(self, '_dynamic_seed') and self._dynamic_seed:
-            np_seed = 100 * np.random.randint(1, 1000)
-            self.seed(self._seed + np_seed)
-        elif hasattr(self, '_seed'):
-            self.seed(self._seed)
+        seed = 0
+        try:
+            if hasattr(self, '_seed') and hasattr(self, '_dynamic_seed') and self._dynamic_seed:
+                np_seed = 100 * np.random.randint(1, 1000)
+                seed = self._seed + np_seed
+                self.seed(seed)
+            elif hasattr(self, '_seed'):
+                seed = self._seed
+                self.seed(seed)
+        except Exception as e:
+            logging.error("Seed error: {}".format(seed))
+            logging.error(e)
         raw_obs = self._env.reset()
-        self.prev_action = None
         self.obs_df = raw_obs  # this is because action needs obs.index to be initialized, so we store the obs in df format
         agent_obs = to_ndarray(copy.deepcopy(raw_obs.values)).astype('float32')
-        if self.action_feature:
-            action_agent_obs = self.get_action_feature(agent_obs)
         action_mask = np.ones((500, 1))
         obs = {
             'global_state': agent_obs.flatten(),
-            'agent_state': agent_obs if not self.action_feature else action_agent_obs,
+            'agent_state': agent_obs,
             'action_mask': action_mask,
         }
         return obs
@@ -267,32 +232,22 @@ class DingMATradingEnv(DingTradingEnv):
     def step(self, action: Union[np.ndarray, list]) -> BaseEnvTimestep:
         action = to_ndarray(action).astype(np.float32)
         action = self.action_to_series(action)
-        if self.p_random_action > 0 or self.p_sticky_action > 0:
-            action = self.stochastic_action(action)
         raw_obs, rew, done, info = self._env.step(action)
         self.obs_df = raw_obs  # keep a copy of the original df obs
         agent_obs = to_ndarray(copy.deepcopy(raw_obs.values)).astype('float32')
         action_mask = np.ones((500, 1))
-        if self.action_feature:
-            action_agent_obs = self.get_action_feature(agent_obs)
         obs = {
             'global_state': agent_obs.flatten(),
-            'agent_state': agent_obs if not self.action_feature else action_agent_obs,
+            'agent_state': agent_obs,
             'action_mask': action_mask,
         }
         rew = to_ndarray([rew]).astype(np.float32)
-        self.prev_action = action
         return BaseEnvTimestep(obs, rew, done, info)
-
-    def get_action_feature(self, agent_obs):
-        if self.prev_action is None:
-            self.prev_action = self.action_to_series(np.zeros_like(self.random_action().to_numpy()))
-        return np.concatenate((agent_obs, np.expand_dims(self.prev_action.to_numpy(), -1)), axis=-1)
 
 
 def norm_action(action, norm_type=None):
 
-    assert norm_type in {None, 'softmax', 'cut_softmax', 'gumbel_softmax', 'topk_softmax'}
+    assert norm_type in {None, 'softmax', 'cut_softmax', 'gumbel_softmax', 'topk_softmax', 'scale'}
 
     def _softmax(x):
         e_x = np.exp(x - np.max(x))
@@ -317,16 +272,26 @@ def norm_action(action, norm_type=None):
         x[indexs] = 0
         return x
 
+    def _scale(x):
+        x[x < 0] = 0
+        if not sum(x) > 1e-6:
+            x[:] = np.random.rand(x.shape[0])
+        x = x / sum(x)
+        return x
+
     if norm_type == 'softmax':
-        action = _softmax(action)
+        action = _scale(_softmax(action))
 
     elif norm_type == "cut_softmax":
-        action = _cut_softmax(action)
+        action = _scale(_cut_softmax(action))
 
     elif norm_type == "gumbel_softmax":
-        action = _gumbel_softmax(action)
+        action = _scale(_gumbel_softmax(action))
 
     elif norm_type == 'topk_softmax':
-        action = _topk_softmax(action)
+        action = _scale(_topk_softmax(action))
+
+    elif norm_type == "scale":
+        action = _scale(action)
 
     return action

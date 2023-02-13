@@ -128,7 +128,6 @@ if __name__ == '__main__':
     parser.add_argument('-po', '--portfolio-optimizer', type=str, default="topk")
     parser.add_argument('-fq', '--freq', type=str, choices=["daily", "weekly"], default="daily")
     parser.add_argument('-dr', '--done-reward', type=str, choices=["default", "sharpe"], default="default")
-    parser.add_argument('-ao', '--action-obs', action='store_true')  # implemented only for mappo
     args = parser.parse_args()
     args.max_episode_steps = 0  # eval on the whole eval data
     if args.exp_name is None:

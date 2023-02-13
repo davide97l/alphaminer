@@ -1,0 +1,12 @@
+#!/bin/bash
+
+#python eval.py --env-type 158 --top-n 50 --load-path /Users/weiyuhui/Desktop/projects/alphaminer/exp/weights/alpha158_sa75_wc/avg_best_at_4115000.pth.tar --exp-name val_sa75_wc_sl --start-time 2017-07-01 --end-time 2018-12-31 -cs 1600;
+python eval.py --env-type 158 --top-n 50 --load-path /Users/weiyuhui/Desktop/projects/alphaminer/exp/weights/alpha158_sa75_wc/avg_best_at_4115000.pth.tar --exp-name val_sa75_wc_sl_top10 --start-time 2017-07-01 --end-time 2018-12-31 -cs 1600 -t 10;
+python eval.py --env-type 158 --top-n 50 --load-path /Users/weiyuhui/Desktop/projects/alphaminer/exp/weights/alpha158_sa75_wc/avg_best_at_4115000.pth.tar --exp-name val_sa75_wc_sl_top10_ss50 --start-time 2017-07-01 --end-time 2018-12-31 -cs 1600 -t 10 -ss 50;
+#python eval.py --env-type 158 --top-n 50 --load-path /Users/weiyuhui/Desktop/projects/alphaminer/exp/weights/alpha158_sa75_wc/avg_best_at_4115000.pth.tar --exp-name val_sa75_wc_sl_evalsa90 --start-time 2017-07-01 --end-time 2018-12-31 -cs 1600 -sa 90 -asp;
+#python eval.py --env-type 158 --top-n 50 --load-path /Users/weiyuhui/Desktop/projects/alphaminer/exp/weights/alpha158_sa75_wc/avg_best_at_4115000.pth.tar --exp-name val_sa75_wc_sl_evalsa90_top10 --start-time 2017-07-01 --end-time 2018-12-31 -cs 1600 -sa 90 -asp -t 10;
+#python eval.py --env-type 158 --top-n 50 --load-path /Users/weiyuhui/Desktop/projects/alphaminer/exp/weights/alpha158_sa75_wc/avg_best_at_4115000.pth.tar --exp-name train_sa75_wc_sl --start-time 2010-01-01 --end-time 2016-12-31 -cs 1600;
+python eval.py --env-type 158 --top-n 50 --load-path /Users/weiyuhui/Desktop/projects/alphaminer/exp/weights/alpha158_sa75_wc/avg_best_at_4115000.pth.tar --exp-name train_sa75_wc_sl_top10 --start-time 2010-01-01 --end-time 2016-12-31 -cs 1600 -t 10;
+python eval.py --env-type 158 --top-n 50 --load-path /Users/weiyuhui/Desktop/projects/alphaminer/exp/weights/alpha158_sa75_wc/avg_best_at_4115000.pth.tar --exp-name train_sa75_wc_sl_top10_ss50 --start-time 2010-01-01 --end-time 2016-12-31 -cs 1600 -t 10 -ss 50;
+#python eval.py --env-type 158 --top-n 50 --load-path /Users/weiyuhui/Desktop/projects/alphaminer/exp/weights/alpha158_sa75_wc/avg_best_at_4115000.pth.tar --exp-name train_sa75_wc_sl_evalsa90 --start-time 2010-01-01 --end-time 2016-12-31 -cs 1600 -sa 90 -asp;
+#python eval.py --env-type 158 --top-n 50 --load-path /Users/weiyuhui/Desktop/projects/alphaminer/exp/weights/alpha158_sa75_wc/avg_best_at_4115000.pth.tar --exp-name train_sa75_wc_sl_evalsa90_top10 --start-time 2010-01-01 --end-time 2016-12-31 -cs 1600 -sa 90 -asp -t 10;

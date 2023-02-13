@@ -1,0 +1,11 @@
+#!/bin/bash
+
+#python eval.py --env-type 158 --top-n 50 --load-path /Users/weiyuhui/Desktop/projects/alphaminer/exp/weights/alpha158_sa25_asp_wc/avg_best_at_3735000.pth.tar --exp-name vw5_vt15 --start-time 2019-01-01 --end-time 2022-06-30 -cs 1600 --top-n 50 -tp volatility_threshold -vt .15
+#python eval.py --env-type 158 --top-n 50 --load-path /Users/weiyuhui/Desktop/projects/alphaminer/exp/weights/alpha158_sa25_asp_wc/avg_best_at_3735000.pth.tar --exp-name vw5_vt18 --start-time 2019-01-01 --end-time 2022-06-30 -cs 1600 --top-n 50 -tp volatility_threshold -vt .18
+#python eval.py --env-type 158 --top-n 50 --load-path /Users/weiyuhui/Desktop/projects/alphaminer/exp/weights/alpha158_sa25_asp_wc/avg_best_at_3735000.pth.tar --exp-name vw5_vt21 --start-time 2019-01-01 --end-time 2022-06-30 -cs 1600 --top-n 50 -tp volatility_threshold -vt .21
+#python eval.py --env-type 158 --top-n 50 --load-path /Users/weiyuhui/Desktop/projects/alphaminer/exp/weights/alpha158_sa25_asp_wc/avg_best_at_3735000.pth.tar --exp-name vw5_vt24 --start-time 2019-01-01 --end-time 2022-06-30 -cs 1600 --top-n 50 -tp volatility_threshold -vt .24
+
+python eval.py --env-type 158 --top-n 10 --load-path /Users/weiyuhui/Desktop/projects/alphaminer/exp/weights/alpha158_sa25_asp_wc/avg_best_at_3735000.pth.tar --exp-name vw5_vt15_top10 --start-time 2019-01-01 --end-time 2022-06-30 -cs 1600 --top-n 10 -tp volatility_threshold -vt .15
+python eval.py --env-type 158 --top-n 10 --load-path /Users/weiyuhui/Desktop/projects/alphaminer/exp/weights/alpha158_sa25_asp_wc/avg_best_at_3735000.pth.tar --exp-name vw5_vt18_top10 --start-time 2019-01-01 --end-time 2022-06-30 -cs 1600 --top-n 10 -tp volatility_threshold -vt .18
+python eval.py --env-type 158 --top-n 10 --load-path /Users/weiyuhui/Desktop/projects/alphaminer/exp/weights/alpha158_sa25_asp_wc/avg_best_at_3735000.pth.tar --exp-name vw5_vt21_top10 --start-time 2019-01-01 --end-time 2022-06-30 -cs 1600 --top-n 10 -tp volatility_threshold -vt .21
+python eval.py --env-type 158 --top-n 10 --load-path /Users/weiyuhui/Desktop/projects/alphaminer/exp/weights/alpha158_sa25_asp_wc/avg_best_at_3735000.pth.tar --exp-name vw5_vt24_top10 --start-time 2019-01-01 --end-time 2022-06-30 -cs 1600 --top-n 10 -tp volatility_threshold -vt .24

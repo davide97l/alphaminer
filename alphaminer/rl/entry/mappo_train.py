@@ -58,10 +58,6 @@ def get_env_config(args, market, start_time, end_time, env_cls=DingTradingEnv):
         action_norm=args.action_norm,
         freq=args.freq,
         done_reward=args.done_reward,
-        p_sticky_action=args.p_sticky_action,
-        p_random_action=args.p_random_action,
-        action_feature=args.action_obs,
-        action_same_prob=args.action_same_prob,
     )
     env_config = EasyDict(env_config)
     env_config.data_handler.type = {
@@ -88,7 +84,7 @@ def get_policy_config(args, policy_cls, collector_cls, evaluator_cls, learner_cl
             epoch_per_collect=10,
             batch_size=args.batch_size,
             entropy_weight=0.001,
-            ignore_done=True,
+            ignore_done=~args.no_ignore_done,
             learner=dict(save_ckpt_after_iter=100000, )
         ),
         collect=dict(n_episode=args.collect_env_num, discount_factor=0.999, collector=dict(get_train_sample=True, )),
@@ -121,10 +117,6 @@ def get_policy_config(args, policy_cls, collector_cls, evaluator_cls, learner_cl
     )
 
     policy_config = EasyDict(ppo_config)
-    if args.action_obs:
-        policy_config.model.agent_obs_shape += 1
-
-    print(policy_config.model.agent_obs_shape)
 
     policy_config = deep_merge_dicts(policy_cls.default_config(), policy_config)
     policy_config.collect.collector = deep_merge_dicts(collector_cls.default_config(), policy_config.collect.collector)
@@ -144,7 +136,6 @@ def main(cfg, args):
 
     collect_env_cfg = get_env_config(args, market, args.train_start_time, args.train_end_time, env_cls=DingMATradingEnv)
     eval_env_cfg = get_env_config(args, market, args.eval_start_time, args.eval_end_time, env_cls=DingMATradingEnv)
-    eval_env_cfg.p_sticky_action, eval_env_cfg.p_random_action = 0., 0.  # no additional stochasticity in eval env
     cfg.env.manager = deep_merge_dicts(SyncSubprocessEnvManager.default_config(), cfg.env.manager)
 
     policy_cfg = get_policy_config(args, PPOPolicy, EpisodeSerialCollector, InteractionSerialEvaluator, BaseLearner)
@@ -220,7 +211,7 @@ if __name__ == '__main__':
         default=20,
     )
     parser.add_argument('-ms', '--max-episode-steps', type=int, default=40)
-    parser.add_argument('-cn', '--collect-env-num', type=int, default=2)
+    parser.add_argument('-cn', '--collect-env-num', type=int, default=1)
     parser.add_argument('-en', '--evaluate-env-num', type=int, default=1)
     parser.add_argument('-s', '--seed', type=int, default=0)
     parser.add_argument('-bs', '--batch-size', type=int, default=64)
@@ -238,10 +229,7 @@ if __name__ == '__main__':
     parser.add_argument('-po', '--portfolio-optimizer', type=str, default="topk")
     parser.add_argument('-fq', '--freq', type=str, choices=["daily", "weekly"], default="daily")
     parser.add_argument('-dr', '--done-reward', type=str, choices=["default", "sharpe"], default="default")
-    parser.add_argument('-sa', '--p-sticky-action', type=float, default=0.)
-    parser.add_argument('-ra', '--p-random-action', type=float, default=0.)
-    parser.add_argument('-ao', '--action-obs', action='store_true')  # implemented only for mappo
-    parser.add_argument('-asp', '--action-same-prob', action='store_true')
+    parser.add_argument('-nd', '--no_ignore_done', action='store_true')
     args = parser.parse_args()
     if args.exp_name is None:
         args.exp_name = default_exp_name('mappo', args)
