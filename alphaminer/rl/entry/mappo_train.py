@@ -66,6 +66,7 @@ def get_env_config(args, market, start_time, end_time, env_cls=DingTradingEnv):
         '360': 'alpha360',
         '518': 'alpha518',
         'guotai': 'guotai',
+        '158+': 'alpha158+',
     }[args.env_type]
 
     env_config = deep_merge_dicts(env_cls.default_config(), env_config)
@@ -87,7 +88,11 @@ def get_policy_config(args, policy_cls, collector_cls, evaluator_cls, learner_cl
             ignore_done=~args.no_ignore_done,
             learner=dict(save_ckpt_after_iter=100000, )
         ),
-        collect=dict(n_episode=args.collect_env_num, discount_factor=0.999, collector=dict(get_train_sample=True, )),
+        collect=dict(
+            n_episode=args.collect_env_num,
+            discount_factor=0.999,
+            collector=dict(get_train_sample=True, reward_shaping=args.shape_reward,),
+        ),
         eval=dict(evaluator=dict(eval_freq=5000, )),
         model=dict(
             agent_obs_shape={
@@ -96,6 +101,7 @@ def get_policy_config(args, policy_cls, collector_cls, evaluator_cls, learner_cl
                 '360': 360 * obs_multiplier,
                 '518': 518 * obs_multiplier,
                 'guotai': 10 * obs_multiplier,
+                '158+': 203 * obs_multiplier,
             }[args.env_type],
             global_obs_shape={
                 'basic': 6 * obs_multiplier * (500 if not sample_size else sample_size),
@@ -103,6 +109,7 @@ def get_policy_config(args, policy_cls, collector_cls, evaluator_cls, learner_cl
                 '360': 360 * obs_multiplier * (500 if not sample_size else sample_size),
                 '518': 518 * obs_multiplier * (500 if not sample_size else sample_size),
                 'guotai': 10 * obs_multiplier * (50 if not sample_size else sample_size),
+                '158+': 203 * obs_multiplier * (500 if not sample_size else sample_size),
             }[args.env_type],
             action_shape=1,
             agent_num={
@@ -111,6 +118,7 @@ def get_policy_config(args, policy_cls, collector_cls, evaluator_cls, learner_cl
                 '360': 500 if not sample_size else sample_size,
                 '518': 500 if not sample_size else sample_size,
                 'guotai': 50 if not sample_size else sample_size,
+                '158+': 500 if not sample_size else sample_size,
             }[args.env_type],
             #bound_type='tanh',
         )
@@ -203,7 +211,7 @@ def main(cfg, args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='trading rl train')
-    parser.add_argument('-e', '--env-type', choices=['basic', '158', '360', '518', 'guotai'], default='basic')
+    parser.add_argument('-e', '--env-type', choices=['basic', '158', '360', '518', '158+', 'guotai'], default='basic')
     parser.add_argument(
         '-t',
         '--top-n',
@@ -230,6 +238,7 @@ if __name__ == '__main__':
     parser.add_argument('-fq', '--freq', type=str, choices=["daily", "weekly"], default="daily")
     parser.add_argument('-dr', '--done-reward', type=str, choices=["default", "sharpe"], default="default")
     parser.add_argument('-nd', '--no_ignore_done', action='store_true')
+    parser.add_argument('-sr', '--shape_reward', action='store_true')
     args = parser.parse_args()
     if args.exp_name is None:
         args.exp_name = default_exp_name('mappo', args)

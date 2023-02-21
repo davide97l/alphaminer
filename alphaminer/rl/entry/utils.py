@@ -10,7 +10,8 @@ args_dict = {
     'slippage': 'ss',
     'softmax': 'sm',
     'top_n': 't',
-    'critic_size': 'cs'
+    'critic_size': 'cs',
+    'shape_reward': 'sr'
 }
 
 exclude_keys = ['exp_name', 'learning_rate']

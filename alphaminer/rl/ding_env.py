@@ -13,6 +13,7 @@ from ding.utils import ENV_REGISTRY
 from alphaminer.rl.env import TradingEnv, TradingPolicy, DataSource, TradingRecorder, RandomSampleWrapper, PORTFOLIO_OPTIMISERS, WeeklyEnv
 from alphaminer.data.handler import AlphaMinerHandler
 from alphaminer.data.alpha518_handler import Alpha518
+from alphaminer.data.alpha_vol_handler import AlphaVol
 from qlib.contrib.data.handler import Alpha158, Alpha360
 from alphaminer.rl.gtja_env import GTJADataSource
 
@@ -117,6 +118,8 @@ class DingTradingEnv(BaseEnv):
                 dh = Alpha360(**dh_config)
             elif dh_type == 'alpha518':
                 dh = Alpha518(**dh_config)
+            elif dh_type == 'alpha158+':
+                dh = AlphaVol(**dh_config)
             elif dh_type == 'guotai':
                 ds = GTJADataSource(
                     start_date=self._cfg.start_date, end_date=self._cfg.end_date, data_dir=self._cfg.data_path
@@ -173,6 +176,15 @@ class DingTradingEnv(BaseEnv):
         action = self.action_space.sample()
         action = self.action_to_series(action)
         return action
+
+    def reward_shaping(self, transitions: List[dict]) -> List[dict]:
+        new_transitions = copy.deepcopy(transitions)
+        std = np.array([trans['reward'] for trans in new_transitions]).std()
+        for trans in new_transitions:
+            trans['reward'] = trans['reward'] / std
+        #print('std', std)
+        #input()
+        return new_transitions
 
     def __repr__(self) -> str:
         return "Alphaminer Trading Env"

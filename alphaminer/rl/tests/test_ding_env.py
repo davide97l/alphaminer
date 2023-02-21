@@ -166,8 +166,9 @@ def test_ding_trading_qlib_csi500():
             break
 
 
-@pytest.mark.parametrize("alpha", ['518', '158', '360'])
+@pytest.mark.parametrize("alpha", ['518', '158', '360', '158+'])
 def test_ding_trading_alpha_csi500(alpha):
+    alpha_obs = {'518': 518, '158': 158, '360': 360, '158+': 203}
     qlib.init(provider_uri=get_data_path(), region="cn")
     set_pkg_seed(1234, use_cuda=False)
     config = EasyDict(alpha_config)
@@ -181,7 +182,8 @@ def test_ding_trading_alpha_csi500(alpha):
     while True:
         action = np.random.random(size=action_dim)
         timestep = env.step(action)
-        assert timestep.obs.shape[0] == 3 * int(alpha)
+        print(timestep.obs.shape)
+        assert timestep.obs.shape[0] == 3 * alpha_obs[alpha]
         final_eval_reward += timestep.reward
         #print("{}(dtype: {})".format(timestep.reward, timestep.reward.dtype))
         if timestep.done:

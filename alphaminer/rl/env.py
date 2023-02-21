@@ -141,10 +141,10 @@ class DataSource:
         self._benchmark_price = df
         return df
 
-    def _load_obs_data(self) -> Dict[pd.Timestamp, pd.DataFrame]:
+    def _load_obs_data(self, label=False) -> Dict[pd.Timestamp, pd.DataFrame]:
         data = {}
         obs = self._dh.fetch()
-        if not self._label_in_obs:
+        if not self._label_in_obs and not label:
             labels = [col for col in obs.columns if 'LABEL' in col.upper()]
             obs = obs.drop(labels, axis=1)
         for date in obs.index.get_level_values(0).unique():
@@ -724,6 +724,9 @@ class TradingEnv(gym.Env):
             Get obs of each step.
         """
         return self.ds.query_obs(date=trading_date), trading_date
+
+    def get_policy(self, ):
+        return self._trading_policy
 
 
 class RandomSampleWrapper(gym.Wrapper):
