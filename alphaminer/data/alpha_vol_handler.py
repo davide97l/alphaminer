@@ -107,7 +107,8 @@ class AlphaVol(DataHandlerLP):
 
     def get_alpha_vol_feature_config(self):
         fields, names = [], []
-        windows = [5, 10, 20, 30, 60]
+        #windows = [5, 10, 20, 30, 60]
+        windows = [5, 10, 20]
         # components of Average True Range (ATR)
         fields += ["Sum($high-$low, %d) / %d" % (d, d) for d in windows]
         names += ["MHL%d" % d for d in windows]
@@ -213,7 +214,8 @@ class AlphaVol(DataHandlerLP):
             fields += ["Ref($volume, %d)/($volume+1e-12)" % d if d != 0 else "$volume/($volume+1e-12)" for d in windows]
             names += ["VOLUME" + str(d) for d in windows]
         if "rolling" in config:
-            windows = config["rolling"].get("windows", [5, 10, 20, 30, 60])
+            #windows = config["rolling"].get("windows", [5, 10, 20, 30, 60])
+            windows = config["rolling"].get("windows", [5, 10, 20])
             include = config["rolling"].get("include", None)
             exclude = config["rolling"].get("exclude", [])
 

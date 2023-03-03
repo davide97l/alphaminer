@@ -129,3 +129,7 @@ dmypy.json
 .pyre/
 
 *.pth
+*.csv
+*.hub
+*.ipynb
+*.txt

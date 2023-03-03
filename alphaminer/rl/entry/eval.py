@@ -105,7 +105,7 @@ def main(cfg, args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='trading rl backtesting')
     parser.add_argument('-p', '--policy', choices=['ppo', 'ddpg'], default='ppo')
-    parser.add_argument('-e', '--env-type', choices=['basic', '158', '360', '518', 'guotai'], default='158')
+    parser.add_argument('-e', '--env-type', choices=['basic', '158', '360', '518', '158+', 'guotai'], default='158')
     parser.add_argument('-a', '--action-type', choices=['single', 'multi'], default='multi')
     parser.add_argument(
         '-t',
@@ -128,6 +128,8 @@ if __name__ == '__main__':
     parser.add_argument('-po', '--portfolio-optimizer', type=str, default="topk")
     parser.add_argument('-fq', '--freq', type=str, choices=["daily", "weekly"], default="daily")
     parser.add_argument('-dr', '--done-reward', type=str, choices=["default", "sharpe"], default="default")
+    parser.add_argument('-nd', '--no_ignore_done', action='store_true')
+    parser.add_argument('-sr', '--shape_reward', action='store_true')
     args = parser.parse_args()
     args.max_episode_steps = 0  # eval on the whole eval data
     if args.exp_name is None:
