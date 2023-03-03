@@ -101,7 +101,7 @@ def get_policy_config(args, policy_cls, collector_cls, evaluator_cls, learner_cl
                 '360': 360 * obs_multiplier,
                 '518': 518 * obs_multiplier,
                 'guotai': 10 * obs_multiplier,
-                '158+': 203 * obs_multiplier,
+                '158+': 127 * obs_multiplier,
             }[args.env_type],
             global_obs_shape={
                 'basic': 6 * obs_multiplier * (500 if not sample_size else sample_size),
@@ -109,7 +109,7 @@ def get_policy_config(args, policy_cls, collector_cls, evaluator_cls, learner_cl
                 '360': 360 * obs_multiplier * (500 if not sample_size else sample_size),
                 '518': 518 * obs_multiplier * (500 if not sample_size else sample_size),
                 'guotai': 10 * obs_multiplier * (50 if not sample_size else sample_size),
-                '158+': 203 * obs_multiplier * (500 if not sample_size else sample_size),
+                '158+': 127 * obs_multiplier * (500 if not sample_size else sample_size),
             }[args.env_type],
             action_shape=1,
             agent_num={
