@@ -119,7 +119,11 @@ class DingTradingEnv(BaseEnv):
             elif dh_type == 'alpha518':
                 dh = Alpha518(**dh_config)
             elif dh_type == 'alpha158+':
-                dh = AlphaVol(**dh_config)
+                windows = [5, 10, 20, 30, 60]
+                n_windows = self._cfg.get("n_windows")
+                if n_windows is not None:
+                    windows = windows[:n_windows]
+                dh = AlphaVol(**dh_config, windows=windows)
             elif dh_type == 'guotai':
                 ds = GTJADataSource(
                     start_date=self._cfg.start_date, end_date=self._cfg.end_date, data_dir=self._cfg.data_path

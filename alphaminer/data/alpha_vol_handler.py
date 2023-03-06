@@ -69,11 +69,15 @@ class AlphaVol(DataHandlerLP):
             fit_end_time=None,
             filter_pipe=None,
             inst_processor=None,
+            windows=None,
             **kwargs,
 
     ):
         infer_processors = check_transform_proc(infer_processors, fit_start_time, fit_end_time)
         learn_processors = check_transform_proc(learn_processors, fit_start_time, fit_end_time)
+        self.windows = [5, 10, 20, 30, 60]
+        if windows:
+            self.windows = windows
 
         data_loader = {
             "class": "QlibDataLoader",
@@ -105,10 +109,9 @@ class AlphaVol(DataHandlerLP):
         fields_vol, names_vol = self.get_alpha_vol_feature_config()
         return fields158 + fields_vol, names158 + names_vol
 
-    def get_alpha_vol_feature_config(self):
+    def get_alpha_vol_feature_config(self):  # 9 * windows
         fields, names = [], []
-        #windows = [5, 10, 20, 30, 60]
-        windows = [5, 10, 20]
+        windows = self.windows
         # components of Average True Range (ATR)
         fields += ["Sum($high-$low, %d) / %d" % (d, d) for d in windows]
         names += ["MHL%d" % d for d in windows]
@@ -156,8 +159,7 @@ class AlphaVol(DataHandlerLP):
         }
         return self.parse_config_to_fields(conf)
 
-    @staticmethod
-    def parse_config_to_fields(config):
+    def parse_config_to_fields(self, config):
         """create factors from config
 
         config = {
@@ -191,7 +193,7 @@ class AlphaVol(DataHandlerLP):
                 "(2*$close-$high-$low)/$open",
                 "(2*$close-$high-$low)/($high-$low+1e-12)",
             ]
-            names += [
+            names += [  # 9
                 "KMID",
                 "KLEN",
                 "KMID2",
@@ -202,20 +204,19 @@ class AlphaVol(DataHandlerLP):
                 "KSFT",
                 "KSFT2",
             ]
-        if "price" in config:
+        if "price" in config:  # 5 * 5
             windows = config["price"].get("windows", range(5))
             feature = config["price"].get("feature", ["OPEN", "HIGH", "LOW", "CLOSE", "VWAP"])
             for field in feature:
                 field = field.lower()
                 fields += ["Ref($%s, %d)/$close" % (field, d) if d != 0 else "$%s/$close" % field for d in windows]
                 names += [field.upper() + str(d) for d in windows]
-        if "volume" in config:
+        if "volume" in config:  # 1 * 5
             windows = config["volume"].get("windows", range(5))
             fields += ["Ref($volume, %d)/($volume+1e-12)" % d if d != 0 else "$volume/($volume+1e-12)" for d in windows]
             names += ["VOLUME" + str(d) for d in windows]
-        if "rolling" in config:
-            #windows = config["rolling"].get("windows", [5, 10, 20, 30, 60])
-            windows = config["rolling"].get("windows", [5, 10, 20])
+        if "rolling" in config:  # 29 * windows
+            windows = config["rolling"].get("windows", self.windows)
             include = config["rolling"].get("include", None)
             exclude = config["rolling"].get("exclude", [])
 

@@ -58,6 +58,7 @@ def get_env_config(args, market, start_time, end_time, env_cls=DingTradingEnv):
         action_norm=args.action_norm,
         freq=args.freq,
         done_reward=args.done_reward,
+        n_windows=args.n_windows,
     )
     env_config = EasyDict(env_config)
     env_config.data_handler.type = {
@@ -101,7 +102,7 @@ def get_policy_config(args, policy_cls, collector_cls, evaluator_cls, learner_cl
                 '360': 360 * obs_multiplier,
                 '518': 518 * obs_multiplier,
                 'guotai': 10 * obs_multiplier,
-                '158+': 127 * obs_multiplier,
+                '158+': (51 + 38 * (args.n_windows-1)) * obs_multiplier,
             }[args.env_type],
             global_obs_shape={
                 'basic': 6 * obs_multiplier * (500 if not sample_size else sample_size),
@@ -109,7 +110,7 @@ def get_policy_config(args, policy_cls, collector_cls, evaluator_cls, learner_cl
                 '360': 360 * obs_multiplier * (500 if not sample_size else sample_size),
                 '518': 518 * obs_multiplier * (500 if not sample_size else sample_size),
                 'guotai': 10 * obs_multiplier * (50 if not sample_size else sample_size),
-                '158+': 127 * obs_multiplier * (500 if not sample_size else sample_size),
+                '158+': (51 + 38 * (args.n_windows-1)) * obs_multiplier * (500 if not sample_size else sample_size),
             }[args.env_type],
             action_shape=1,
             agent_num={
@@ -239,6 +240,7 @@ if __name__ == '__main__':
     parser.add_argument('-dr', '--done-reward', type=str, choices=["default", "sharpe"], default="default")
     parser.add_argument('-nd', '--no_ignore_done', action='store_true')
     parser.add_argument('-sr', '--shape_reward', action='store_true')
+    parser.add_argument('-nw', '--n-windows', type=int, default=None)
     args = parser.parse_args()
     if args.exp_name is None:
         args.exp_name = default_exp_name('mappo', args)
